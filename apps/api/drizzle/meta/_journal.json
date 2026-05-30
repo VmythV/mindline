@@ -8,6 +8,13 @@
       "when": 1780137506727,
       "tag": "0000_flawless_roland_deschain",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780138571767,
+      "tag": "0001_curved_angel",
+      "breakpoints": true
     }
   ]
 }

@@ -57,6 +57,7 @@ export const users = pgTable(
     phone: text('phone'),
     displayName: text('display_name').notNull(),
     avatarUrl: text('avatar_url'),
+    passwordHash: text('password_hash'),
     status: text('status').notNull().default('active'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
