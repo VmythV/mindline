@@ -78,9 +78,9 @@
 - [ ] 租户上下文中间件 + 应用层 `tenant_id` scope 强制（M0.3 起逐查询落实）
 
 ### M0.3 项目与成员
-- [ ] 项目 CRUD `/projects`（含 parentId 父子嵌套）📄 API §4
-- [ ] 成员管理 `/projects/:id/members`；角色枚举 owner/admin/editor/commenter/viewer
-- [ ] 创建项目时自动建 map（1:1，project.mapId 由 join 得到）📄 数据模型 §3.2
+- [x] 项目 CRUD `/projects`（含 parentId 父子嵌套）📄 API §4
+- [x] 成员管理 `/projects/:id/members`；角色枚举 owner/admin/editor/commenter/viewer（声明式 @MinRole + ProjectRoleGuard）
+- [x] 创建项目时自动建 map（1:1，project.mapId 由 join 得到）📄 数据模型 §3.2
 
 ### M0.4 节点类型 Schema 系统
 - [ ] `GET/POST /projects/:id/node-types`；definition 结构校验 📄 API §5、主文档 §3.3
