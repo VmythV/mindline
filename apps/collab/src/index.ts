@@ -1,20 +1,42 @@
 import { Server } from '@hocuspocus/server';
+import { resolveMapRole, verifyAccessToken } from './auth.js';
+import { loadSnapshot, storeSnapshot } from './persistence.js';
 
-const port = Number(process.env.COLLAB_PORT ?? 3002);
+const PORT = Number(process.env.COLLAB_PORT ?? 3002);
 
 /**
- * Hocuspocus 协同服务（骨架）。
- *
- * 待 M0.5 实现（见 docs/detail/Yjs协同详设.md §7）：
- *  - onAuthenticate：JWT + 项目成员资格 + map 读/写权限
- *  - onLoadDocument：从 Postgres 取最新快照 + 增量 update 重建 Y.Doc
- *  - onStoreDocument：防抖落 yjs_updates；周期生成 yjs_snapshots
- *  - Redis 扩展：多实例广播 update / awareness
+ * Hocuspocus 协同服务（M0.5）。documentName = mapId。
+ * 见 docs/detail/Yjs协同详设.md §7。
  */
 const server = Server.configure({
-  port,
+  port: PORT,
+
+  // 连接级鉴权：JWT + 项目成员资格（首版软隔离，下发整文档）
+  async onAuthenticate({ token, documentName }) {
+    let user: { userId: string; tenantId: string };
+    try {
+      user = verifyAccessToken(token);
+    } catch {
+      throw new Error('Unauthorized'); // 关闭码 4401（无/无效 token）
+    }
+    const role = await resolveMapRole(documentName, user.userId, user.tenantId);
+    if (role === null) {
+      throw new Error('Forbidden'); // 关闭码 4403（非成员/跨租户）
+    }
+    return { userId: user.userId, tenantId: user.tenantId, role };
+  },
+
+  async onLoadDocument({ documentName, document }) {
+    await loadSnapshot(documentName, document);
+    return document;
+  },
+
+  async onStoreDocument({ documentName, document }) {
+    await storeSnapshot(documentName, document);
+  },
+
   async onListen() {
-    console.log(`[collab] Hocuspocus listening on ws://localhost:${port}`);
+    console.log(`[collab] Hocuspocus listening on ws://localhost:${PORT}`);
   },
 });
 

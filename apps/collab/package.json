@@ -8,15 +8,22 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
     "@hocuspocus/server": "^2.15.2",
-    "@mindline/shared": "workspace:*"
+    "@mindline/db": "workspace:*",
+    "drizzle-orm": "^0.38.3",
+    "jsonwebtoken": "^9.0.2",
+    "yjs": "^13.6.20"
   },
   "devDependencies": {
+    "@hocuspocus/provider": "^2.15.2",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "ws": "^8.18.0"
   }
 }
