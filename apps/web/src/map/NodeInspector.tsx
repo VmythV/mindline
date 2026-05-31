@@ -42,6 +42,7 @@ export function NodeInspector({
     enabled: !!projectId,
   });
   const def = types?.items.find((t) => t.typeKey === node.type)?.definition;
+  const deprecatedKeys = (node.data._deprecatedFields as string[] | undefined) ?? [];
 
   const { data: history } = useQuery({
     queryKey: ['node-history', repo.mapId, node.id],
@@ -61,8 +62,23 @@ export function NodeInspector({
         />
       </div>
 
-      <div className="text-xs text-slate-400">
-        类型：<span className="text-slate-600">{def?.displayName ?? node.type}</span>
+      <div>
+        <label className="text-xs text-slate-400">类型</label>
+        <select
+          className="w-full mt-1 px-2 py-1 rounded border border-slate-200 text-sm"
+          value={node.type}
+          onChange={(e) => {
+            const nt = types?.items.find((t) => t.typeKey === e.target.value);
+            const keys = (nt?.definition.fields ?? []).map((f) => f.key);
+            repo.setType(node.id, e.target.value, keys);
+          }}
+        >
+          {(types?.items ?? []).map((t) => (
+            <option key={t.id} value={t.typeKey}>
+              {t.definition.displayName ?? t.typeKey}
+            </option>
+          ))}
+        </select>
       </div>
 
       {def?.fields.map((f) => (
@@ -75,6 +91,19 @@ export function NodeInspector({
           />
         </div>
       ))}
+
+      {deprecatedKeys.length > 0 && (
+        <div className="pt-2 border-t border-slate-100">
+          <div className="text-xs text-amber-500 mb-1">已废弃字段（旧类型遗留 · 只读）</div>
+          <ul className="space-y-1 text-xs">
+            {deprecatedKeys.map((k) => (
+              <li key={k} className="text-slate-500">
+                <span className="text-slate-600">{k}</span>：{String(node.data[k] ?? '')}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div>
         <label className="text-xs text-slate-400">历史</label>

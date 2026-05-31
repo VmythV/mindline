@@ -19,13 +19,13 @@
 > 这些决策会影响下方任务的实现方式，建议在进入对应里程碑前确认。详见各条出处。
 
 - [ ] **D1 · ChangeEvent 落库可靠性** ⚠️：现方案"发起方客户端异步落库、远端不重复派生"，发起方掉线/失败可能丢事件。是否在 M0 加服务端兜底（onStoreDocument/update 流补偿 或 落库重试队列）？ 📄 Yjs §4.3 / §10
-- [ ] **D2 · path_ids 维护策略**：二选一——「记录事件发生时的祖先链」vs「查询期按当前结构解析」。影响 M1 branch 子树过滤。 📄 数据模型 §7、API §12
+- [x] **D2 · path_ids 维护策略**：✅ 已定「记录事件发生时的祖先链」（落库冗余、不随移动回改；branch 过滤走 ix_changes_path GIN）。 📄 数据模型 §7、API §12
 - [x] **D3 · ID 生成**：✅ ULID + 前缀，应用层 `newId()` 生成，不做 DB 兜底。 📄 数据模型 §7
 - [ ] **D4 · 配置加密方案**：`ai_provider_configs.config`、`im_channels.config` 含密钥，KMS/对称密钥选型。 📄 数据模型 §7
 - [ ] **D5 · 是否先做 M0a Walking Skeleton**：单租户最小端到端链路先打通再铺开（强烈建议）。
 - [x] **D6 · monorepo 工具确认**：✅ 已采用 pnpm workspace + Turborepo。
 - [x] **D7 · DB 迁移工具选型**：✅ 已选 Drizzle ORM + drizzle-kit。
-- [ ] **D8 · AI 网关形态**：LiteLLM 自托管 vs 自研薄适配层。 📄 主文档 §5.2 / AI §1
+- [x] **D8 · AI 网关形态**：✅ 已定「自研薄适配层」（OpenAI 兼容；最小闭环 env 单网关 + stub 降级）。 📄 主文档 §5.2 / AI §1
 
 ---
 
@@ -129,12 +129,12 @@
 
 ### M1.2 变更历史与时间轴
 - [x] `GET /maps/:mapId/changes`（actor/op/field/batchId/branch/from/to/cursor/limit）📄 API §6
-- [ ] `GET /nodes/:nodeId/history`（单节点字段级历史）
-- [ ] `GET /maps/:mapId/snapshot`（只读快照，导出/3D/搜索/AI 上下文用）
+- [x] `GET /nodes/:nodeId/history`（单节点字段级历史）
+- [x] `GET /maps/:mapId/snapshot`（只读快照，导出/3D/搜索/AI 上下文用）
 - [x] 项目级时间轴 UI：横向流，同 batchId 折叠为批量事件（可展开）
 - [x] 节点历史侧栏（倒序字段级 diff：谁/何时/A→B）
-- [ ] 过滤：人 / 操作类型 / 分支(子树) / 时间范围
-- [ ] path_ids 落库 + branch 过滤实现 🔗 D2 📄 数据模型 §4
+- [x] 过滤：人 / 操作类型 / 分支(子树) / 时间范围
+- [x] path_ids 落库 + branch 过滤实现 🔗 D2 📄 数据模型 §4
 
 ### M1.3 交互体系
 - [x] 快捷键完整清单 📄 主文档 附录B
@@ -144,8 +144,8 @@
 - [x] `Cmd+F` 搜索节点
 
 ### M1.4 自定义字段表单完善
-- [ ] `PUT /node-types/:id`：升 version；破坏性变更（删/改字段）提示建议生成迁移 📄 API §5
-- [ ] 切换节点类型按 A10 处理旧字段（保留旧值 + 标记废弃）📄 主文档 §3.3
+- [x] `PUT /node-types/:id`：升 version；破坏性变更（删/改字段）提示建议生成迁移 📄 API §5
+- [x] 切换节点类型按 A10 处理旧字段（保留旧值 + 标记废弃）📄 主文档 §3.3
 
 ---
 
@@ -153,31 +153,33 @@
 
 > 交付：模型网关 + 生成子树 + diff 预览 · 人工里程碑 + AI 辅助建议/摘要
 > 验收：拆解结果经预览方写入（未确认不入文档/不参与协同）；里程碑可标记；AI 摘要为可编辑初稿
+>
+> 🔶 **已交付「AI 拆解最小闭环」**（M2.1 部分 / M2.2 / M2.3 / M2.4）：自研薄适配层（env 单网关 + stub 降级）、Context Builder、`decompose` SSE、虚影 diff 预览 → 确认写回。完整版（多租户凭证/计量表/能力探测/depth>1/summarize/里程碑）留后续。
 
 ### M2.1 AI 模型网关
-- [ ] 多模型适配（OpenAI 兼容协议优先；LiteLLM 自托管 或 自研薄适配层）🔗 D8 📄 AI §1
+- [~] 多模型适配（OpenAI 兼容协议优先；**最小闭环：自研薄适配层 + env 单网关**）🔗 D8 📄 AI §1
 - [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}` 📄 AI §11
 - [ ] 凭证路由：平台默认额度 / 租户自带 Key（按租户）📄 AI §8、主文档 A6
 - [ ] `ai_provider_configs` / `ai_usage` 表 + tokens in/out 计量 📄 数据模型 §3.8
-- [ ] 错误与降级：functionCall→jsonMode→提示换模型
+- [x] 错误与降级：functionCall→jsonMode（换模型提示后续）
 
 ### M2.2 上下文组装 + 提示词
-- [ ] Context Builder：target/ancestors/siblings/children/targetSchema/userPrompt（从只读快照）📄 AI §2
-- [ ] token 预算裁剪策略（优先级 + 兄弟/父链/富文本截断）📄 AI §2.2
-- [ ] system+user 模板 + `emit_subtree` 函数定义 📄 AI §3
+- [x] Context Builder：target/ancestors/siblings/children/targetSchema/userPrompt（从只读快照）📄 AI §2
+- [x] token 预算裁剪策略（优先级 + 兄弟/父链截断）📄 AI §2.2
+- [x] system+user 模板 + `emit_subtree` 函数定义 📄 AI §3
 
 ### M2.3 生成子树 decompose（SSE）
-- [ ] `POST /ai/decompose`（SSE：meta/op/done/error；role≥Editor）📄 API §7、AI §13
-- [ ] 校验流水线：协议校验(失败重试1次)→Schema校验(逐节点)→业务约束(数量/层数/查重)📄 AI §5
-- [ ] 规整为统一 Proposal（ops/valid/issues/modelMeta）📄 AI §4
-- [ ] 流式 partial + 中断（透传 abort）+ 超时（首字8s/总60s）📄 AI §6
-- [ ] depth≤3（>1 强制整批返回+一次预览）、maxChildren≤20 截断提示 📄 AI §11
+- [x] `POST /ai/decompose`（SSE：meta/op/done/error；role≥Editor）📄 API §7、AI §13
+- [x] 校验流水线：协议校验(失败重试1次)→Schema校验(逐节点)→业务约束(数量/查重)📄 AI §5
+- [x] 规整为统一 Proposal（ops/valid/issues/modelMeta）📄 AI §4
+- [~] 中断（透传 abort）+ 超时（总60s）✓；流式 partial 为「聚合后逐 op 推送」（模型级流式 partial 后续）📄 AI §6
+- [~] maxChildren≤20 ✓；depth 最小闭环固定 1（depth>1 后续）📄 AI §11
 
 ### M2.4 diff 预览（前端）
-- [ ] 虚影节点渲染（半透明 + ✓/✗/✎ 角标）；单个/全部 接受·拒绝·就地编辑 📄 AI §7
-- [ ] 确认 → 命令层 ApplyProposal（同 batchId）→ Yjs 写入 + `aiGenerate` 事件
-- [ ] **未确认不进 Y.Doc、不参与协同同步**（本地 UI 态）
-- [ ] `POST /ai/proposals/:proposalId/apply`（审计/服务端编排，按需）📄 API §7
+- [x] 虚影节点渲染（半透明虚线 + ✓/✗ 角标）；单个/全部 接受·拒绝·就地编辑标题 📄 AI §7
+- [x] 确认 → 命令层 ApplyProposal（同 batchId）→ Yjs 写入 + `aiGenerate` 事件
+- [x] **未确认不进 Y.Doc、不参与协同同步**（本地 UI 态）
+- [ ] `POST /ai/proposals/:proposalId/apply`（审计/服务端编排；最小闭环用前端本地应用）📄 API §7
 
 ### M2.5 摘要 summarize（SSE）
 - [ ] `POST /ai/summarize`（scope: nodeId 或 range；逐 token delta）📄 API §7

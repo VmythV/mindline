@@ -68,6 +68,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      yjs:
+        specifier: ^13.6.31
+        version: 13.6.31
     devDependencies:
       '@nestjs/cli':
         specifier: ^10.4.9

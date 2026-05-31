@@ -1,6 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
-import { newId, type Role } from '@mindline/shared';
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import * as Y from 'yjs';
+import { newId, type NodeSnapshot, type Role } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
 import { hasMinRole } from '../common/roles';
@@ -11,12 +12,62 @@ interface Ctx {
   tenantId: string;
 }
 
+/** 时间轴/历史查询的可选过滤条件。 */
+interface ListOpts {
+  limit?: number;
+  nodeId?: string;
+  actor?: string;
+  op?: string;
+  branch?: string;
+  from?: number;
+  to?: number;
+  cursor?: string | null;
+}
+
+/** 快照节点的顶层保留字段；其余键归入 data。 */
+const SNAPSHOT_TOP_KEYS = new Set([
+  'id',
+  'parentId',
+  'order',
+  'type',
+  'title',
+  'ownerId',
+  'status',
+  'tags',
+  'collaborators',
+  'links',
+  'private',
+]);
+
+/** Y.Map 节点（toJSON 后的普通对象）→ 契约快照形态。 */
+function toNodeSnapshot(n: Record<string, unknown>): NodeSnapshot {
+  const data: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(n)) {
+    if (!SNAPSHOT_TOP_KEYS.has(k)) data[k] = v;
+  }
+  const snap: NodeSnapshot = {
+    id: String(n.id),
+    parentId: (n.parentId as string | null) ?? null,
+    order: (n.order as string) ?? '',
+    type: (n.type as string) ?? 'idea',
+    title: (n.title as string) ?? '',
+    ownerId: (n.ownerId as string | null) ?? null,
+    data,
+  };
+  if (n.status !== undefined) snap.status = n.status as string;
+  if (n.tags !== undefined) snap.tags = n.tags as string[];
+  if (n.collaborators !== undefined) snap.collaborators = n.collaborators as string[];
+  if (n.links !== undefined) snap.links = n.links as NodeSnapshot['links'];
+  if (n.private !== undefined) snap.private = n.private as boolean;
+  return snap;
+}
+
 @Injectable()
 export class ChangesService {
   constructor(@Inject(DRIZZLE) private readonly db: Database) {}
 
   /** 校验当前用户对 map 的访问：返回 projectId + 角色；map 不存在/跨租户/非成员 → 404。 */
-  private async resolveMapAccess(mapId: string, ctx: Ctx) {
+  async resolveMapAccess(mapId: string, ctx: Ctx) {
     const rows = await this.db
       .select({
         projectId: schema.maps.projectId,
@@ -58,37 +109,60 @@ export class ChangesService {
       before: e.before ?? null,
       after: e.after ?? null,
       batchId: e.batchId ?? null,
+      pathIds: e.pathIds ?? null,
       ts: new Date(e.ts),
     }));
     await this.db.insert(schema.changeEvents).values(rows);
     return { accepted: rows.length };
   }
 
-  /** 时间轴/历史查询（M1：可选按 nodeId 过滤；附带操作人显示名）。 */
-  async list(mapId: string, ctx: Ctx, opts: { limit?: number; nodeId?: string } = {}) {
+  /** 时间轴/历史查询（M1：按 nodeId/actor/op/branch/时间范围过滤；keyset 游标分页；附操作人显示名）。 */
+  async list(mapId: string, ctx: Ctx, opts: ListOpts = {}) {
     await this.resolveMapAccess(mapId, ctx); // 成员即可（Viewer+）
-    const conds = [eq(schema.changeEvents.mapId, mapId)];
-    if (opts.nodeId) conds.push(eq(schema.changeEvents.nodeId, opts.nodeId));
+    const ce = schema.changeEvents;
+    const conds = [eq(ce.mapId, mapId)];
+    if (opts.nodeId) conds.push(eq(ce.nodeId, opts.nodeId));
+    if (opts.actor) conds.push(eq(ce.actorId, opts.actor));
+    if (opts.op) conds.push(eq(ce.op, opts.op));
+    if (opts.from) conds.push(gte(ce.ts, new Date(opts.from)));
+    if (opts.to) conds.push(lte(ce.ts, new Date(opts.to)));
+    // branch：命中子树根自身，或其 path_ids（祖先链，不含自身）含该根 → 走 ix_changes_path GIN
+    if (opts.branch) {
+      conds.push(sql`(${ce.nodeId} = ${opts.branch} or ${opts.branch} = any(${ce.pathIds}))`);
+    }
+    // keyset 游标：按 (ts, id) 降序翻页，cursor 形如 "<tsMillis>:<id>"
+    if (opts.cursor) {
+      const [tsStr, idStr] = opts.cursor.split(':');
+      const cTs = Number(tsStr);
+      if (Number.isFinite(cTs) && idStr) {
+        // 注意：裸 sql 模板不可直接绑定 Date，用 to_timestamp(秒) 传数字
+        conds.push(sql`(${ce.ts}, ${ce.id}) < (to_timestamp(${cTs / 1000}), ${idStr})`);
+      }
+    }
+    const limit = Math.min(opts.limit ?? 100, 200);
     const rows = await this.db
       .select({
-        id: schema.changeEvents.id,
-        nodeId: schema.changeEvents.nodeId,
-        actorId: schema.changeEvents.actorId,
+        id: ce.id,
+        nodeId: ce.nodeId,
+        actorId: ce.actorId,
         actorName: schema.users.displayName,
-        op: schema.changeEvents.op,
-        field: schema.changeEvents.field,
-        before: schema.changeEvents.before,
-        after: schema.changeEvents.after,
-        batchId: schema.changeEvents.batchId,
-        ts: schema.changeEvents.ts,
+        op: ce.op,
+        field: ce.field,
+        before: ce.before,
+        after: ce.after,
+        batchId: ce.batchId,
+        ts: ce.ts,
       })
-      .from(schema.changeEvents)
-      .leftJoin(schema.users, eq(schema.users.id, schema.changeEvents.actorId))
+      .from(ce)
+      .leftJoin(schema.users, eq(schema.users.id, ce.actorId))
       .where(and(...conds))
-      .orderBy(desc(schema.changeEvents.ts))
-      .limit(Math.min(opts.limit ?? 100, 200));
+      .orderBy(desc(ce.ts), desc(ce.id))
+      .limit(limit + 1);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
     return {
-      items: rows.map((r) => ({
+      items: page.map((r) => ({
         id: r.id,
         nodeId: r.nodeId,
         actorId: r.actorId,
@@ -100,7 +174,53 @@ export class ChangesService {
         batchId: r.batchId,
         ts: r.ts.getTime(),
       })),
-      nextCursor: null,
+      nextCursor: hasMore && last ? `${last.ts.getTime()}:${last.id}` : null,
     };
+  }
+
+  /** 单节点字段级历史（倒序）。路由仅带 nodeId，反查其 map 做鉴权；无事件则返回空。 */
+  async nodeHistory(
+    nodeId: string,
+    ctx: Ctx,
+    opts: { limit?: number; cursor?: string | null } = {},
+  ) {
+    const found = await this.db
+      .select({ mapId: schema.changeEvents.mapId })
+      .from(schema.changeEvents)
+      .where(
+        and(
+          eq(schema.changeEvents.nodeId, nodeId),
+          eq(schema.changeEvents.tenantId, ctx.tenantId),
+        ),
+      )
+      .limit(1);
+    const mapId = found[0]?.mapId;
+    if (!mapId) return { nodeId, items: [], nextCursor: null };
+    const res = await this.list(mapId, ctx, {
+      nodeId,
+      limit: opts.limit,
+      cursor: opts.cursor,
+    });
+    return { nodeId, items: res.items, nextCursor: res.nextCursor };
+  }
+
+  /** 只读快照：解码该 map 最近落库的 Yjs 全量快照为扁平节点 JSON（导出/3D/搜索/AI 上下文用）。 */
+  async snapshot(mapId: string, ctx: Ctx) {
+    await this.resolveMapAccess(mapId, ctx); // 成员即可（Viewer+）
+    const rows = await this.db
+      .select({ version: schema.yjsSnapshots.version, state: schema.yjsSnapshots.state })
+      .from(schema.yjsSnapshots)
+      .where(eq(schema.yjsSnapshots.mapId, mapId))
+      .orderBy(desc(schema.yjsSnapshots.version))
+      .limit(1);
+    const generatedAt = Date.now();
+    const snap = rows[0];
+    if (!snap) return { mapId, version: 0, nodes: [] as NodeSnapshot[], generatedAt };
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, new Uint8Array(snap.state));
+    const raw = doc.getMap('nodes').toJSON() as Record<string, Record<string, unknown>>;
+    doc.destroy();
+    const nodes = Object.values(raw).map((n) => toNodeSnapshot(n));
+    return { mapId, version: snap.version, nodes, generatedAt };
   }
 }

@@ -5,5 +5,6 @@ import { ChangesController } from './changes.controller';
 @Module({
   providers: [ChangesService],
   controllers: [ChangesController],
+  exports: [ChangesService],
 })
 export class ChangesModule {}

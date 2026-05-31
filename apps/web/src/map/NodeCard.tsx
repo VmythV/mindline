@@ -12,6 +12,10 @@ interface NodeCardContext {
   editingId: string | null;
   setEditingId: (id: string | null) => void;
   editingPeers: Map<string, PeerBadge[]>;
+  shadow?: {
+    toggle: (tempId: string, accept: boolean) => void;
+    edit: (tempId: string, title: string) => void;
+  };
 }
 
 let ctx: NodeCardContext | null = null;
@@ -21,7 +25,51 @@ export function setNodeCardContext(c: NodeCardContext) {
 }
 
 function NodeCardImpl({ id, data, selected }: NodeProps) {
-  const node = (data as CardData).node;
+  const cardData = data as CardData;
+  const node = cardData.node;
+  const shadow = cardData.shadow;
+
+  // 虚影（AI 提案预览）：半透明虚线 + ✓/✗ 角标 + 标题就地编辑；不进 Y.Doc
+  if (shadow) {
+    const accepted = shadow.accepted;
+    return (
+      <div
+        className={`relative px-3 py-2 rounded-lg border-2 border-dashed text-sm min-w-[120px] max-w-[220px] ${
+          accepted ? 'border-emerald-400 bg-emerald-50/70' : 'border-slate-300 bg-white/50 opacity-60'
+        }`}
+      >
+        <Handle type="target" position={Position.Left} className="!bg-slate-300" />
+        <input
+          className="w-full bg-transparent outline-none text-slate-700"
+          defaultValue={node.title}
+          onChange={(e) => ctx?.shadow?.edit(shadow.tempId, e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()}
+        />
+        {shadow.issues.length > 0 && (
+          <div className="text-[10px] text-amber-500 truncate" title={shadow.issues.join('；')}>
+            ⚠ {shadow.issues[0]}
+          </div>
+        )}
+        <div className="absolute -top-2 -right-1 flex gap-0.5">
+          <button
+            title="接受"
+            onClick={() => ctx?.shadow?.toggle(shadow.tempId, true)}
+            className={`w-4 h-4 rounded-full text-[9px] text-white flex items-center justify-center ${accepted ? 'bg-emerald-500' : 'bg-slate-300'}`}
+          >
+            ✓
+          </button>
+          <button
+            title="拒绝"
+            onClick={() => ctx?.shadow?.toggle(shadow.tempId, false)}
+            className={`w-4 h-4 rounded-full text-[9px] text-white flex items-center justify-center ${!accepted ? 'bg-rose-500' : 'bg-slate-300'}`}
+          >
+            ✗
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   const editing = ctx?.editingId === id;
   const peers = ctx?.editingPeers.get(id) ?? [];
   const [draft, setDraft] = useState(node.title);

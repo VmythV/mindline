@@ -32,6 +32,11 @@ class ChangeEventInput {
   @IsString()
   batchId?: string;
 
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  pathIds?: string[];
+
   @IsInt()
   ts!: number;
 }

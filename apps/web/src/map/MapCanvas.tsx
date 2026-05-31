@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
   Controls,
@@ -13,12 +13,13 @@ import {
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { useAuth } from '../stores/auth';
 import { colorFor } from './colors';
-import { layout, type CardData } from './layout';
+import { layout, COL, ROW, type CardData } from './layout';
 import { NodeCard, setNodeCardContext } from './NodeCard';
 import { NodeInspector } from './NodeInspector';
 import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { MapRepository } from './MapRepository';
+import { useProposal } from './useProposal';
 import type { NodeView } from './types';
 
 const nodeTypes = { card: NodeCard };
@@ -91,6 +92,7 @@ export function MapCanvas({
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CardData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<Edge>([]);
+  const ai = useProposal(repo);
 
   const editingPeers = new Map<string, { name: string; color: string }[]>();
   for (const p of peers) {
@@ -105,6 +107,7 @@ export function MapCanvas({
     editingId,
     setEditingId,
     editingPeers,
+    shadow: { toggle: ai.toggle, edit: ai.edit },
   });
 
   useEffect(() => {
@@ -225,11 +228,62 @@ export function MapCanvas({
   const selfName = user?.displayName ?? '我';
   const selfColor = user ? colorFor(user.id) : '#888';
 
+  const startDecompose = (nodeId: string) => {
+    const p = window.prompt('AI 拆解 · 补充要求（可留空；点取消则不拆解）');
+    if (p === null) return;
+    ai.start({ nodeId, prompt: p || undefined });
+  };
+
+  // 虚影节点/边（AI 提案预览，本地态，不进 Y.Doc）；挂在 anchor 右侧
+  const shadowNodes = useMemo<Node<CardData>[]>(() => {
+    const p = ai.proposal;
+    if (!p) return [];
+    const anchor = rfNodes.find((n) => n.id === p.anchorNodeId);
+    const base = anchor?.position ?? { x: 0, y: 0 };
+    return p.ops.map((op, i) => ({
+      id: `shadow-${op.tempId}`,
+      position: { x: base.x + COL, y: base.y + (i - (p.ops.length - 1) / 2) * ROW },
+      data: {
+        node: {
+          id: op.tempId,
+          parentId: p.anchorNodeId,
+          order: '',
+          type: op.node?.type ?? 'idea',
+          title: ai.edits[op.tempId] ?? op.node?.title ?? '',
+          data: {},
+        },
+        shadow: {
+          tempId: op.tempId,
+          accepted: !!ai.decisions[op.tempId],
+          valid: op.valid,
+          issues: op.issues,
+        },
+      },
+      type: 'card',
+      draggable: false,
+      selectable: false,
+    }));
+  }, [ai.proposal, ai.decisions, ai.edits, rfNodes]);
+
+  const shadowEdges = useMemo<Edge[]>(() => {
+    const p = ai.proposal;
+    if (!p) return [];
+    return p.ops.map((op) => ({
+      id: `se-${op.tempId}`,
+      source: p.anchorNodeId,
+      target: `shadow-${op.tempId}`,
+      type: 'smoothstep',
+      animated: true,
+      style: { stroke: '#cbd5e1', strokeDasharray: '4 4' },
+    }));
+  }, [ai.proposal]);
+
   const paletteActions: PaletteCommand[] = selectedId
     ? [
         { id: 'child', label: '＋ 新建子节点', hint: 'Tab', run: () => setSelectedId(repo.createChild(selectedId)) },
         { id: 'sibling', label: '＋ 新建同级节点', hint: 'Enter', run: () => setSelectedId(repo.createSibling(selectedId)) },
         { id: 'rename', label: '✎ 重命名选中', hint: 'F2', run: () => setEditingId(selectedId) },
+        { id: 'decompose', label: '🤖 AI 拆解此节点', hint: '', run: () => startDecompose(selectedId) },
         {
           id: 'delete',
           label: '🗑 删除选中（含子树）',
@@ -246,6 +300,7 @@ export function MapCanvas({
     { label: '新建子节点', run: () => setSelectedId(repo.createChild(nodeId)) },
     { label: '新建同级节点', run: () => setSelectedId(repo.createSibling(nodeId)) },
     { label: '重命名', run: () => { setSelectedId(nodeId); setEditingId(nodeId); } },
+    { label: '🤖 AI 拆解', run: () => startDecompose(nodeId) },
     {
       label: '删除（含子树）',
       danger: true,
@@ -265,9 +320,45 @@ export function MapCanvas({
             <Avatar key={p.clientId} name={p.user.name} color={p.user.color} title={p.user.name} />
           ))}
         </div>
+        {ai.proposal && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-lg border border-slate-200 px-3 py-2 flex items-center gap-2 text-xs">
+            <span className="text-slate-600">
+              🤖 拆解预览 {ai.proposal.ops.length} 项
+              {ai.running ? ' · 生成中…' : ''}
+              {ai.error ? ` · ${ai.error}` : ''}
+            </span>
+            <button
+              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200"
+              onClick={() => ai.proposal!.ops.forEach((o) => ai.toggle(o.tempId, true))}
+            >
+              全选
+            </button>
+            <button
+              className="px-2 py-0.5 rounded bg-slate-100 hover:bg-slate-200"
+              onClick={() => ai.proposal!.ops.forEach((o) => ai.toggle(o.tempId, false))}
+            >
+              全不选
+            </button>
+            <button
+              className="px-2 py-0.5 rounded bg-blue-500 text-white hover:bg-blue-600"
+              onClick={() => {
+                const ids = ai.apply();
+                if (ids[0]) setSelectedId(ids[0]);
+              }}
+            >
+              写入
+            </button>
+            <button
+              className="px-2 py-0.5 rounded text-slate-400 hover:text-slate-600"
+              onClick={ai.clear}
+            >
+              取消
+            </button>
+          </div>
+        )}
         <ReactFlow
-          nodes={rfNodes}
-          edges={rfEdges}
+          nodes={[...rfNodes, ...shadowNodes]}
+          edges={[...rfEdges, ...shadowEdges]}
           onNodesChange={onNodesChange}
           nodeTypes={nodeTypes}
           onNodeClick={onNodeClick}

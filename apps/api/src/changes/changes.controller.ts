@@ -22,10 +22,40 @@ export class ChangesController {
     @CurrentUser() user: AuthUser,
     @Query('limit') limit?: string,
     @Query('node') node?: string,
+    @Query('actor') actor?: string,
+    @Query('op') op?: string,
+    @Query('branch') branch?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('cursor') cursor?: string,
   ) {
     return this.svc.list(mapId, user, {
       limit: limit ? Number(limit) : undefined,
       nodeId: node,
+      actor,
+      op,
+      branch,
+      from: from ? Number(from) : undefined,
+      to: to ? Number(to) : undefined,
+      cursor: cursor ?? null,
+    });
+  }
+
+  @Get('maps/:mapId/snapshot')
+  snapshot(@Param('mapId') mapId: string, @CurrentUser() user: AuthUser) {
+    return this.svc.snapshot(mapId, user);
+  }
+
+  @Get('nodes/:nodeId/history')
+  history(
+    @Param('nodeId') nodeId: string,
+    @CurrentUser() user: AuthUser,
+    @Query('limit') limit?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.svc.nodeHistory(nodeId, user, {
+      limit: limit ? Number(limit) : undefined,
+      cursor: cursor ?? null,
     });
   }
 }

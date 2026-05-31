@@ -3,9 +3,19 @@ import type { NodeView } from './types';
 
 const COL = 240;
 const ROW = 72;
+export { COL, ROW };
+
+/** 虚影（AI 提案预览）节点的附加渲染信息。 */
+export interface ShadowMeta {
+  tempId: string;
+  accepted: boolean;
+  valid: boolean;
+  issues: string[];
+}
 
 export interface CardData extends Record<string, unknown> {
   node: NodeView;
+  shadow?: ShadowMeta;
 }
 
 /** 简单层级树布局：x 按深度，y 按 DFS 叶子顺序，父节点居中于子节点。 */

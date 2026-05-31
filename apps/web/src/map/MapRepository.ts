@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import { generateKeyBetween } from 'fractional-indexing';
-import { newId, type ChangeOp } from '@mindline/shared';
+import { newId, type ChangeOp, type Proposal } from '@mindline/shared';
 import type { NodeView } from './types';
 
 export interface EmitEvent {
@@ -10,6 +10,7 @@ export interface EmitEvent {
   before?: unknown;
   after?: unknown;
   batchId?: string;
+  pathIds?: string[];
   ts: number;
 }
 
@@ -39,6 +40,9 @@ export class MapRepository {
   }
 
   private static readonly STRUCT_KEYS = new Set(['id', 'parentId', 'order', 'type', 'title']);
+
+  /** 通用 data 字段（不随类型切换判废）：富文本正文 desc、废弃登记表本身。 */
+  private static readonly SYSTEM_DATA_KEYS = new Set(['desc', '_deprecatedFields']);
 
   private toView(ym: YNode): NodeView {
     const data: Record<string, unknown> = {};
@@ -86,7 +90,7 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, null, order, 'idea', '中心主题'));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title: '中心主题', parentId: null }, ts: Date.now() }]);
+    this.onChanges([{ nodeId: id, op: 'create', after: { title: '中心主题', parentId: null }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
     return id;
   }
 
@@ -98,7 +102,7 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, parentId, order, 'idea', title));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, ts: Date.now() }]);
+    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
     return id;
   }
 
@@ -116,7 +120,7 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, parentId, order, 'idea', title));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, ts: Date.now() }]);
+    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
     return id;
   }
 
@@ -126,7 +130,7 @@ export class MapRepository {
     const before = node.get('title') as string;
     if (before === title) return;
     this.doc.transact(() => node.set('title', title), this.origin);
-    this.onChanges([{ nodeId: id, op: 'rename', before, after: title, ts: Date.now() }]);
+    this.onChanges([{ nodeId: id, op: 'rename', before, after: title, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
   }
 
   /** 设置结构字段（如富文本正文 desc）。M0 简化：值整体替换同步（非字符级协同）。 */
@@ -136,7 +140,32 @@ export class MapRepository {
     const before = node.get(field);
     if (before === value) return;
     this.doc.transact(() => node.set(field, value), this.origin);
-    this.onChanges([{ nodeId: id, op: 'setField', field, before, after: value, ts: Date.now() }]);
+    this.onChanges([{ nodeId: id, op: 'setField', field, before, after: value, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+  }
+
+  /**
+   * 切换节点类型（A10）：旧值一律保留；不在新类型 Schema 的旧字段登记到 `_deprecatedFields`
+   * 并以只读形式呈现；若新类型重新包含某废弃字段则自动复活。validFieldKeys 由调用方按新类型 Schema 传入。
+   */
+  setType(id: string, newType: string, validFieldKeys: string[]): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const before = node.get('type') as string;
+    if (before === newType) return;
+    const valid = new Set(validFieldKeys);
+    const nowDeprecated: string[] = [];
+    node.forEach((_v, k) => {
+      if (MapRepository.STRUCT_KEYS.has(k) || MapRepository.SYSTEM_DATA_KEYS.has(k)) return;
+      if (!valid.has(k)) nowDeprecated.push(k);
+    });
+    const prev = (node.get('_deprecatedFields') as string[] | undefined) ?? [];
+    const stillDeprecated = prev.filter((k) => !valid.has(k)); // 新类型重新含的字段复活
+    const merged = Array.from(new Set([...stillDeprecated, ...nowDeprecated]));
+    this.doc.transact(() => {
+      node.set('type', newType);
+      node.set('_deprecatedFields', merged);
+    }, this.origin);
+    this.onChanges([{ nodeId: id, op: 'setField', field: 'type', before, after: newType, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
   }
 
   deleteSubtree(id: string): void {
@@ -149,10 +178,21 @@ export class MapRepository {
     collect(id);
     const batchId = newId('batch');
     const ts = Date.now();
+    // 删除前快照各节点祖先链（删后无法再取）；D2：记录事件发生时的链
+    const paths = new Map<string, string[]>();
+    toDelete.forEach((nid) => paths.set(nid, this.getAncestorIds(nid)));
     this.doc.transact(() => {
       toDelete.forEach((nid) => this.nodes.delete(nid));
     }, this.origin);
-    this.onChanges(toDelete.map((nid) => ({ nodeId: nid, op: 'delete' as ChangeOp, batchId, ts })));
+    this.onChanges(
+      toDelete.map((nid) => ({
+        nodeId: nid,
+        op: 'delete' as ChangeOp,
+        batchId,
+        pathIds: paths.get(nid),
+        ts,
+      })),
+    );
   }
 
   /** 判断 maybeChildId 是否在 ancestorId 的子树内（含自身）。 */
@@ -166,6 +206,19 @@ export class MapRepository {
     return false;
   }
 
+  /** 该节点的祖先 id 链（不含自身，由近到远）。用于 ChangeEvent.path_ids（D2：记录事件发生时的链）。 */
+  getAncestorIds(nodeId: string): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>([nodeId]); // 防御性：避免异常环导致死循环
+    let pid = (this.nodes.get(nodeId)?.get('parentId') as string | null) ?? null;
+    while (pid && !seen.has(pid)) {
+      out.push(pid);
+      seen.add(pid);
+      pid = (this.nodes.get(pid)?.get('parentId') as string | null) ?? null;
+    }
+    return out;
+  }
+
   /** 移动节点到新父（拖拽改父）；禁止移入自身子树，落到新父末尾。 */
   moveNode(nodeId: string, newParentId: string): void {
     if (nodeId === newParentId) return;
@@ -175,6 +228,8 @@ export class MapRepository {
     const oldParent = (node.get('parentId') as string | null) ?? null;
     if (oldParent === newParentId) return;
     const oldOrder = node.get('order') as string;
+    // 移动前快照旧分支祖先链（D2：归属事件发生时所在分支）
+    const pathIds = this.getAncestorIds(nodeId);
     const sibs = this.siblings(newParentId).filter((n) => n.id !== nodeId);
     const order = generateKeyBetween(sibs[sibs.length - 1]?.order ?? null, null);
     this.doc.transact(() => {
@@ -187,9 +242,56 @@ export class MapRepository {
         op: 'move',
         before: { parentId: oldParent, order: oldOrder },
         after: { parentId: newParentId, order },
+        pathIds,
         ts: Date.now(),
       },
     ]);
+  }
+
+  /**
+   * 应用 AI 提案（确认后写入）：仅写入 accepted 的 op，单事务建节点，
+   * tempId→realId 映射解析 parentRef（命中 tempId 则用新建 id，否则视为真实 id）；
+   * 共享 proposal.batchId 产出 aiGenerate 事件（M1 时间轴折叠为一条批量事件）。
+   */
+  applyProposal(
+    proposal: Proposal,
+    accepted: Set<string>,
+    edits: Record<string, string>,
+  ): string[] {
+    const ops = proposal.ops.filter((o) => accepted.has(o.tempId));
+    if (!ops.length) return [];
+    const tempToReal = new Map<string, string>();
+    const created: string[] = [];
+    this.doc.transact(() => {
+      for (const op of ops) {
+        const id = newId('node');
+        tempToReal.set(op.tempId, id);
+        const ref = op.parentRef ?? proposal.anchorNodeId;
+        const parentId = tempToReal.get(ref) ?? ref;
+        const sibs = this.siblings(parentId);
+        const order = generateKeyBetween(sibs[sibs.length - 1]?.order ?? null, null);
+        const title = edits[op.tempId] ?? op.node?.title ?? '新节点';
+        const type = op.node?.type ?? 'idea';
+        const ym = this.makeNode(id, parentId, order, type, title);
+        const data = op.node?.data ?? {};
+        for (const [k, v] of Object.entries(data)) {
+          if (v !== undefined && !MapRepository.STRUCT_KEYS.has(k)) ym.set(k, v);
+        }
+        this.nodes.set(id, ym);
+        created.push(id);
+      }
+    }, this.origin);
+    const ts = Date.now();
+    this.onChanges(
+      created.map((nodeId) => ({
+        nodeId,
+        op: 'aiGenerate' as ChangeOp,
+        batchId: proposal.batchId,
+        pathIds: this.getAncestorIds(nodeId),
+        ts,
+      })),
+    );
+    return created;
   }
 
   /**

@@ -37,6 +37,7 @@ export interface FieldDef {
   unit?: string;
   collab?: boolean; // true → 存为 Y.Text（多人实时编辑）
   uiHint?: string;
+  deprecated?: boolean; // A10：切换类型后旧字段保留并标记废弃
 }
 
 export interface NodeTypeDefinition {
@@ -131,4 +132,39 @@ export interface Proposal {
   batchId: string;
   ops: ProposalOp[];
   modelMeta?: ProposalModelMeta;
+}
+
+// ===== AI 拆解请求 + SSE 事件 —— API §7 / AI拆解详设 §13 =====
+export interface DecomposeRequest {
+  mapId: string;
+  nodeId: string;
+  targetType?: string; // 缺省=与父同类型或 idea
+  depth?: number; // 1..3（最小闭环固定 1）
+  maxChildren?: number; // 1..20（默认 8）
+  prompt?: string; // 补充要求
+  lang?: string; // 语言代码，默认 zh
+}
+
+/** SSE 事件：meta → op* → done | error */
+export interface AiSseMeta {
+  proposalId: string;
+  batchId: string;
+  provider: string;
+  model: string;
+}
+export type AiSseOp = ProposalOp; // op 事件载荷即单条 ProposalOp
+export interface AiSseStats {
+  total: number;
+  valid: number;
+  invalid: number;
+  tokens: { in: number; out: number };
+}
+export interface AiSseDone {
+  proposalId: string;
+  stats: AiSseStats;
+}
+export interface AiSseError {
+  code: string;
+  message: string;
+  retryable: boolean;
 }
