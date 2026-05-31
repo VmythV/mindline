@@ -31,6 +31,20 @@ export function MapCanvas({ repo, nodes }: { repo: MapRepository; nodes: NodeVie
     function onKey(e: KeyboardEvent) {
       const active = document.activeElement;
       if (active && active.tagName === 'INPUT') return; // 编辑中不触发
+
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) repo.redo();
+        else repo.undo();
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        repo.redo();
+        return;
+      }
+
       if (!selectedId) return;
 
       if (e.key === 'Tab') {

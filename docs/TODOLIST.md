@@ -89,20 +89,20 @@
 - [ ] 节点详情面板：按 Schema 动态渲染表单（enum→下拉、date→日期、richtext→协同编辑器、user→人员选择…）
 
 ### M0.5 Yjs 协同内核（apps/collab）
-- [ ] Y.Doc 结构：nodes 扁平 Map（parentId+order+title:Y.Text+data:Y.Map…）+ meta 📄 Yjs §2
-- [ ] 分数索引排序（fractional-indexing；同位冲突以 nodeId 二级兜底）📄 Yjs §3
+- [x] Y.Doc 结构：nodes 扁平 Map（parentId+order+title+data…）+ meta（title 暂 string，Y.Text 后续）📄 Yjs §2
+- [x] 分数索引排序（fractional-indexing；同位冲突以 nodeId 二级兜底）📄 Yjs §3
 - [x] `onAuthenticate`：JWT + 项目成员资格 + map 读/写权（e2e 验证）📄 Yjs §7
 - [x] `onLoadDocument`：最近快照重建（增量 update 优化后续）
 - [x] `onStoreDocument`：防抖落 `yjs_snapshots`（snapshot-only；增量 + 压实后续）
 - [ ] Redis pub/sub 多实例广播；WS 关闭码 4401/4403/4404/1011
-- [ ] 前端 children 派生索引（监听 nodes 增量更新，不双写 children）📄 Yjs §2
+- [x] 前端 children 派生索引（监听 nodes 增量更新，不双写 children）📄 Yjs §2
 
 ### M0.6 命令层（packages/shared + web）
 - [x] `MapRepository` 封装唯一写入口（对外仅暴露命令 API）📄 Yjs §11
-- [ ] 命令：CreateNode/DeleteSubtree/MoveNode/RenameNode/SetField/SetOwner/SetType 📄 Yjs §4.1
+- [x] 命令：CreateNode/RenameNode/DeleteSubtree（move/setField/setOwner/setType 待补）📄 Yjs §4.1
 - [x] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
-- [ ] 批量命令共享 batchId（删子树）
-- [ ] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方）+ **服务端兜底** ⚠️ 🔗 D1 📄 API §6
+- [x] 批量命令共享 batchId（删子树）
+- [x] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方已实现；服务端兜底 D1 待补）⚠️ 🔗 D1 📄 API §6
 
 ### M0.7 2D 树编辑（web · React Flow）
 - [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
@@ -112,7 +112,7 @@
 - [ ] 轻富文本节点正文（Tiptap + y-prosemirror：加粗/斜体/列表/链接/行内代码）📄 主文档 A3
 
 ### M0.8 撤销重做（A9）
-- [ ] `Y.UndoManager`（trackedOrigins=本地 origin，captureTimeout=500，仅撤自己）📄 Yjs §5
+- [x] `Y.UndoManager`（trackedOrigins=本地 origin，captureTimeout=500，仅撤自己）📄 Yjs §5
 - [ ] 撤销/重做产出补偿 ChangeEvent；复合命令用 `stopCapturing()` 封为单 undo 单元
 
 ---

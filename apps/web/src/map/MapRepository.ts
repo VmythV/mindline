@@ -23,6 +23,7 @@ type YNode = Y.Map<unknown>;
 export class MapRepository {
   readonly nodes: Y.Map<YNode>;
   readonly origin = { local: true };
+  readonly undoManager: Y.UndoManager;
 
   constructor(
     readonly mapId: string,
@@ -30,6 +31,11 @@ export class MapRepository {
     private readonly onChanges: (events: EmitEvent[]) => void,
   ) {
     this.nodes = doc.getMap<YNode>('nodes');
+    // A9：仅跟踪本地 origin 的变更 → 撤销只影响自己的操作，不误撤他人
+    this.undoManager = new Y.UndoManager(this.nodes, {
+      trackedOrigins: new Set([this.origin]),
+      captureTimeout: 500,
+    });
   }
 
   private toView(ym: YNode): NodeView {
@@ -130,5 +136,17 @@ export class MapRepository {
       toDelete.forEach((nid) => this.nodes.delete(nid));
     }, this.origin);
     this.onChanges(toDelete.map((nid) => ({ nodeId: nid, op: 'delete' as ChangeOp, batchId, ts })));
+  }
+
+  /**
+   * 撤销 / 重做（A9）。UndoManager 已限定 trackedOrigins=本地 origin，故只撤自己的操作。
+   * 注：撤销/重做的补偿 ChangeEvent 落库待后续完善（当前仅恢复文档结构与协同同步）。
+   */
+  undo(): void {
+    this.undoManager.undo();
+  }
+
+  redo(): void {
+    this.undoManager.redo();
   }
 }

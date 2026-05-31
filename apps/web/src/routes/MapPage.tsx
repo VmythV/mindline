@@ -25,7 +25,7 @@ export function MapPage() {
         </button>
         <span className="font-semibold text-slate-800">{project?.name ?? '加载中…'}</span>
         <span className="ml-auto text-xs text-slate-400">
-          {synced ? '● 已连接' : '○ 连接中…'} · Tab 建子 · Enter 建同级 · 双击/F2 改名 · Del 删除
+          {synced ? '● 已连接' : '○ 连接中…'} · Tab 建子 · Enter 建同级 · 双击/F2 改名 · Del 删除 · ⌘Z 撤销
         </span>
       </header>
       <div className="flex-1 min-h-0">
