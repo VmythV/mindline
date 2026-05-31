@@ -17,6 +17,8 @@ export const ID_PREFIX = {
   batch: 'b_',
   milestone: 'ms_',
   imChannel: 'ch_',
+  aiProviderConfig: 'apc_',
+  aiUsage: 'au_',
   aiProposal: 'prop_',
   migration: 'mig_',
   job: 'job_',

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api } from '../lib/api';
+import { api, apiStream } from '../lib/api';
 import type { ChangeList, NodeTypeList } from '../lib/types';
 import type { MapRepository } from './MapRepository';
 import type { NodeView } from './types';
@@ -49,6 +49,22 @@ export function NodeInspector({
     queryFn: () => api<ChangeList>(`/maps/${repo.mapId}/changes?node=${node.id}`),
     refetchInterval: 4000,
   });
+
+  // AI 摘要（子树）：流式累积为可编辑初稿
+  const [summary, setSummary] = useState('');
+  const [summarizing, setSummarizing] = useState(false);
+  const runSummarize = () => {
+    setSummary('');
+    setSummarizing(true);
+    void apiStream(
+      '/ai/summarize',
+      { mapId: repo.mapId, nodeId: node.id },
+      (event, data) => {
+        if (event === 'delta') setSummary((s) => s + ((data as { text?: string }).text ?? ''));
+        else if (event === 'done' || event === 'error') setSummarizing(false);
+      },
+    ).catch(() => setSummarizing(false));
+  };
 
   return (
     <aside className="w-80 shrink-0 border-l border-slate-200 bg-white p-4 space-y-4 overflow-auto">
@@ -104,6 +120,36 @@ export function NodeInspector({
           </ul>
         </div>
       )}
+
+      <div className="pt-2 border-t border-slate-100">
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-slate-400">AI 摘要</label>
+          <button
+            className="text-xs text-blue-600 hover:underline disabled:opacity-50"
+            disabled={summarizing}
+            onClick={runSummarize}
+          >
+            {summarizing ? '生成中…' : '🤖 生成摘要'}
+          </button>
+        </div>
+        {(summary || summarizing) && (
+          <>
+            <textarea
+              className="w-full mt-1 px-2 py-1 rounded border border-slate-200 text-xs h-24 resize-y"
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="生成中…"
+            />
+            <button
+              className="mt-1 text-xs text-slate-500 hover:text-blue-600 disabled:opacity-50"
+              disabled={!summary.trim()}
+              onClick={() => repo.setField(node.id, 'desc', `<p>${summary.trim()}</p>`)}
+            >
+              填入正文（desc）
+            </button>
+          </>
+        )}
+      </div>
 
       <div>
         <label className="text-xs text-slate-400">历史</label>

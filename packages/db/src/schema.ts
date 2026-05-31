@@ -250,6 +250,82 @@ export const changeEvents = pgTable(
   ],
 );
 
+// ===================== AI 配置与用量（M2.1） =====================
+
+export const aiProviderConfigs = pgTable(
+  'ai_provider_configs',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(), // qwen/openai/deepseek/vllm...
+    config: jsonb('config').notNull(), // { endpoint, model?, apiKeyEnc, capabilities? } —— apiKey 已加密
+    isDefault: boolean('is_default').notNull().default(false),
+    enabled: boolean('enabled').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // 每租户至多一个默认
+    uniqueIndex('uq_ai_default')
+      .on(t.tenantId)
+      .where(sql`${t.isDefault}`),
+  ],
+);
+
+export const aiUsage = pgTable(
+  'ai_usage',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }), // 保真
+    capability: text('capability').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    tokensIn: integer('tokens_in').notNull().default(0),
+    tokensOut: integer('tokens_out').notNull().default(0),
+    ts: timestamp('ts', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'ai_usage_capability_ck',
+      sql`${t.capability} in ('decompose','summarize','complete','converse','rewrite')`,
+    ),
+    index('ix_ai_usage_tenant_ts').on(t.tenantId, t.ts),
+  ],
+);
+
+// ===================== 里程碑（M2.6） =====================
+
+export const milestones = pgTable(
+  'milestones',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    nodeId: text('node_id'), // 可锚定到节点（节点在 Yjs，无 FK）
+    title: text('title').notNull(),
+    description: text('description'),
+    aiSummary: text('ai_summary'), // AI 生成、可编辑
+    rangeStart: timestamp('range_start', { withTimezone: true }),
+    rangeEnd: timestamp('range_end', { withTimezone: true }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('ix_milestones_project').on(t.projectId, t.rangeStart)],
+);
+
 export const schema = {
   tenants,
   users,
@@ -262,4 +338,7 @@ export const schema = {
   yjsUpdates,
   yjsSnapshots,
   changeEvents,
+  aiProviderConfigs,
+  aiUsage,
+  milestones,
 };

@@ -168,3 +168,40 @@ export interface AiSseError {
   message: string;
   retryable: boolean;
 }
+
+// ===== AI 摘要 summarize —— API §7 =====
+export interface SummarizeRequest {
+  mapId: string;
+  nodeId: string;
+  scope?: 'subtree' | 'node'; // 默认 subtree
+  lang?: string;
+  prompt?: string;
+}
+export interface AiSseDelta {
+  text: string;
+}
+
+// ===== 里程碑 —— 数据模型 §3.6 / API §8 =====
+export interface Milestone {
+  id: string;
+  projectId: string;
+  nodeId: string | null;
+  title: string;
+  description: string | null;
+  aiSummary: string | null;
+  rangeStart: number | null; // epoch 毫秒
+  rangeEnd: number | null;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface MilestoneSuggestion {
+  title: string;
+  reason: string;
+  anchorNodeId: string | null;
+}
+
+export interface MilestoneSuggestResponse {
+  suggestions: MilestoneSuggestion[];
+  summaryDraft: string;
+}

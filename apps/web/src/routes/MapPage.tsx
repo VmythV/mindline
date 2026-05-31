@@ -48,7 +48,12 @@ export function MapPage() {
           )}
         </div>
         {showTimeline && mapId && (
-          <TimelinePanel mapId={mapId} nodes={nodes} onClose={() => setShowTimeline(false)} />
+          <TimelinePanel
+            mapId={mapId}
+            projectId={projectId ?? ''}
+            nodes={nodes}
+            onClose={() => setShowTimeline(false)}
+          />
         )}
       </div>
     </div>

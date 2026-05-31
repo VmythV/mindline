@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { ChangeEventView, ChangeList } from '../lib/types';
 import type { NodeView } from './types';
+import { MilestonesSection } from './MilestonesSection';
 
 const OP_LABEL: Record<string, string> = {
   create: '创建',
@@ -54,10 +55,12 @@ const selCls =
 
 export function TimelinePanel({
   mapId,
+  projectId,
   nodes,
   onClose,
 }: {
   mapId: string;
+  projectId: string;
   nodes?: NodeView[];
   onClose: () => void;
 }) {
@@ -104,6 +107,8 @@ export function TimelinePanel({
           ×
         </button>
       </header>
+
+      <MilestonesSection projectId={projectId} nodes={nodes} />
 
       <div className="px-3 py-2 border-b border-slate-100 grid grid-cols-2 gap-1.5">
         <select className={selCls} value={actor} onChange={(e) => setActor(e.target.value)}>

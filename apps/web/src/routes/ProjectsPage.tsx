@@ -32,6 +32,9 @@ export function ProjectsPage() {
         <span className="font-semibold text-slate-800">思谱 Mindline</span>
         <div className="flex items-center gap-3 text-sm text-slate-500">
           <span>{user?.displayName}</span>
+          <button className="hover:text-blue-600" onClick={() => navigate('/settings/ai')}>
+            AI 设置
+          </button>
           <button className="hover:text-blue-600" onClick={logout}>
             退出
           </button>

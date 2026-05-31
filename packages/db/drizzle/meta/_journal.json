@@ -15,6 +15,20 @@
       "when": 1780138571767,
       "tag": "0001_curved_angel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780221994598,
+      "tag": "0002_productive_mandarin",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780223283746,
+      "tag": "0003_sharp_sentry",
+      "breakpoints": true
     }
   ]
 }

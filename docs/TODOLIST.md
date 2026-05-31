@@ -21,7 +21,7 @@
 - [ ] **D1 · ChangeEvent 落库可靠性** ⚠️：现方案"发起方客户端异步落库、远端不重复派生"，发起方掉线/失败可能丢事件。是否在 M0 加服务端兜底（onStoreDocument/update 流补偿 或 落库重试队列）？ 📄 Yjs §4.3 / §10
 - [x] **D2 · path_ids 维护策略**：✅ 已定「记录事件发生时的祖先链」（落库冗余、不随移动回改；branch 过滤走 ix_changes_path GIN）。 📄 数据模型 §7、API §12
 - [x] **D3 · ID 生成**：✅ ULID + 前缀，应用层 `newId()` 生成，不做 DB 兜底。 📄 数据模型 §7
-- [ ] **D4 · 配置加密方案**：`ai_provider_configs.config`、`im_channels.config` 含密钥，KMS/对称密钥选型。 📄 数据模型 §7
+- [x] **D4 · 配置加密方案**：✅ 已定 AES-256-GCM + env 主密钥（`AI_CONFIG_SECRET`）；DB 仅存密文，仅加密 apiKey。 📄 数据模型 §7
 - [ ] **D5 · 是否先做 M0a Walking Skeleton**：单租户最小端到端链路先打通再铺开（强烈建议）。
 - [x] **D6 · monorepo 工具确认**：✅ 已采用 pnpm workspace + Turborepo。
 - [x] **D7 · DB 迁移工具选型**：✅ 已选 Drizzle ORM + drizzle-kit。
@@ -154,13 +154,13 @@
 > 交付：模型网关 + 生成子树 + diff 预览 · 人工里程碑 + AI 辅助建议/摘要
 > 验收：拆解结果经预览方写入（未确认不入文档/不参与协同）；里程碑可标记；AI 摘要为可编辑初稿
 >
-> 🔶 **已交付「AI 拆解最小闭环」**（M2.1 部分 / M2.2 / M2.3 / M2.4）：自研薄适配层（env 单网关 + stub 降级）、Context Builder、`decompose` SSE、虚影 diff 预览 → 确认写回。完整版（多租户凭证/计量表/能力探测/depth>1/summarize/里程碑）留后续。
+> 🔶 **M2 全部交付**（M2.1–M2.6）：自研薄适配层 + 多租户凭证（AES-256-GCM）/路由/计量、Context Builder、`decompose` SSE + 虚影 diff 预览、`summarize` SSE、里程碑 CRUD + AI 建议/摘要、stub 降级。待续（非 MVP 必需）：能力探测、depth>1、range 时间区间摘要、画布里程碑标记。
 
 ### M2.1 AI 模型网关
-- [~] 多模型适配（OpenAI 兼容协议优先；**最小闭环：自研薄适配层 + env 单网关**）🔗 D8 📄 AI §1
-- [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}` 📄 AI §11
-- [ ] 凭证路由：平台默认额度 / 租户自带 Key（按租户）📄 AI §8、主文档 A6
-- [ ] `ai_provider_configs` / `ai_usage` 表 + tokens in/out 计量 📄 数据模型 §3.8
+- [x] 多模型适配（OpenAI 兼容；租户可配多 provider/endpoint/model）🔗 D8 📄 AI §1
+- [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}`（后续）📄 AI §11
+- [x] 凭证路由：按租户取启用配置（默认优先）→ 解密调用；无则回退 env→stub 📄 AI §8、主文档 A6
+- [x] `ai_provider_configs` / `ai_usage` 表 + tokens 计量 + AES-256-GCM 加密 + `/ai/providers` CRUD + `/ai/usage` 📄 数据模型 §3.8
 - [x] 错误与降级：functionCall→jsonMode（换模型提示后续）
 
 ### M2.2 上下文组装 + 提示词
@@ -182,13 +182,13 @@
 - [ ] `POST /ai/proposals/:proposalId/apply`（审计/服务端编排；最小闭环用前端本地应用）📄 API §7
 
 ### M2.5 摘要 summarize（SSE）
-- [ ] `POST /ai/summarize`（scope: nodeId 或 range；逐 token delta）📄 API §7
+- [x] `POST /ai/summarize`（scope=nodeId 子树；分块 delta；NodeInspector 可编辑初稿→填入正文）；range 时间区间后续 📄 API §7
 
 ### M2.6 里程碑（人工 + AI 辅助）
-- [ ] `milestones` 表 + CRUD（GET/POST/PATCH/DELETE）📄 API §8、数据模型 §3.6
-- [ ] 手动标记：名称+说明+锚定节点+关联时间区间
-- [ ] `POST /projects/:id/milestones/ai-suggest`：扫描变更建议里程碑 + 区间摘要初稿
-- [ ] 时间轴叠加里程碑标记（点击展开）
+- [x] `milestones` 表 + CRUD（GET/POST/PATCH/DELETE；PATCH/DELETE 反查鉴权）📄 API §8、数据模型 §3.6
+- [x] 手动标记：名称+说明+锚定节点+关联时间区间
+- [x] `POST /projects/:id/milestones/ai-suggest`：扫描区间变更聚合 → 建议里程碑 + 摘要初稿（复用网关/计量）
+- [x] 时间轴叠加里程碑标记（TimelinePanel 顶部，点击展开 + 编辑 aiSummary）
 
 ---
 

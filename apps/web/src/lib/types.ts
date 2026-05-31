@@ -72,3 +72,53 @@ export interface NodeTypeItem {
 export interface NodeTypeList {
   items: NodeTypeItem[];
 }
+
+export interface ProviderItem {
+  id: string;
+  provider: string;
+  endpoint: string;
+  model: string | null;
+  apiKeyMask: string;
+  isDefault: boolean;
+  enabled: boolean;
+  createdAt: number;
+}
+
+export interface ProviderList {
+  items: ProviderItem[];
+}
+
+export interface UsageRow {
+  provider: string;
+  model: string;
+  calls: number;
+  tokensIn: number;
+  tokensOut: number;
+}
+
+export interface UsageResp {
+  items: UsageRow[];
+  totals: { calls: number; tokensIn: number; tokensOut: number };
+}
+
+export interface MilestoneItem {
+  id: string;
+  projectId: string;
+  nodeId: string | null;
+  title: string;
+  description: string | null;
+  aiSummary: string | null;
+  rangeStart: number | null;
+  rangeEnd: number | null;
+  createdBy: string;
+  createdAt: number;
+}
+
+export interface MilestoneList {
+  items: MilestoneItem[];
+}
+
+export interface SuggestResp {
+  suggestions: { title: string; reason: string; anchorNodeId: string | null }[];
+  summaryDraft: string;
+}

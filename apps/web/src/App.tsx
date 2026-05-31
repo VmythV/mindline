@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './stores/auth';
 import { LoginPage } from './routes/LoginPage';
 import { ProjectsPage } from './routes/ProjectsPage';
+import { AiProvidersPage } from './routes/AiProvidersPage';
 import { MapPage } from './routes/MapPage';
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -28,6 +29,14 @@ export function App() {
         element={
           <RequireAuth>
             <MapPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/settings/ai"
+        element={
+          <RequireAuth>
+            <AiProvidersPage />
           </RequireAuth>
         }
       />
