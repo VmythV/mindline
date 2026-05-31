@@ -13,14 +13,16 @@ interface MapDocState {
   repo: MapRepository | null;
   nodes: NodeView[];
   synced: boolean;
+  provider: HocuspocusProvider | null;
 }
 
-/** 连接协同文档：建立 Hocuspocus provider + Y.Doc，派生节点列表，提供命令层。 */
+/** 连接协同文档：建立 Hocuspocus provider + Y.Doc，派生节点列表，提供命令层与 provider（awareness）。 */
 export function useMapDoc(mapId: string | undefined): MapDocState {
   const token = useAuth((s) => s.accessToken);
   const [nodes, setNodes] = useState<NodeView[]>([]);
   const [synced, setSynced] = useState(false);
   const repoRef = useRef<MapRepository | null>(null);
+  const providerRef = useRef<HocuspocusProvider | null>(null);
 
   useEffect(() => {
     if (!mapId || !token) return;
@@ -29,6 +31,7 @@ export function useMapDoc(mapId: string | undefined): MapDocState {
 
     const doc = new Y.Doc();
     const provider = new HocuspocusProvider({ url: COLLAB_URL, name: mapId, token, document: doc });
+    providerRef.current = provider;
 
     const onChanges = (events: EmitEvent[]) => {
       void api(`/maps/${mapId}/changes`, {
@@ -57,8 +60,9 @@ export function useMapDoc(mapId: string | undefined): MapDocState {
       provider.destroy();
       doc.destroy();
       repoRef.current = null;
+      providerRef.current = null;
     };
   }, [mapId, token]);
 
-  return { repo: repoRef.current, nodes, synced };
+  return { repo: repoRef.current, nodes, synced, provider: providerRef.current };
 }

@@ -15,7 +15,7 @@ export function MapPage() {
   });
 
   const mapId = project?.mapId ?? undefined;
-  const { repo, nodes, synced } = useMapDoc(mapId);
+  const { repo, nodes, synced, provider } = useMapDoc(mapId);
 
   return (
     <div className="h-screen flex flex-col bg-slate-50">
@@ -30,7 +30,7 @@ export function MapPage() {
       </header>
       <div className="flex-1 min-h-0">
         {repo && synced ? (
-          <MapCanvas repo={repo} nodes={nodes} />
+          <MapCanvas repo={repo} nodes={nodes} provider={provider} />
         ) : (
           <div className="h-full flex items-center justify-center text-slate-400">
             正在连接协同文档…

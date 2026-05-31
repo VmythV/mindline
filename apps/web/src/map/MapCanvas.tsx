@@ -10,6 +10,9 @@ import {
   type NodeMouseHandler,
   type OnNodeDrag,
 } from '@xyflow/react';
+import type { HocuspocusProvider } from '@hocuspocus/provider';
+import { useAuth } from '../stores/auth';
+import { colorFor } from './colors';
 import { layout, type CardData } from './layout';
 import { NodeCard, setNodeCardContext } from './NodeCard';
 import { NodeInspector } from './NodeInspector';
@@ -19,17 +22,89 @@ import type { NodeView } from './types';
 const nodeTypes = { card: NodeCard };
 const DROP_RADIUS = 160;
 
-export function MapCanvas({ repo, nodes }: { repo: MapRepository; nodes: NodeView[] }) {
+interface PeerUser {
+  id: string;
+  name: string;
+  color: string;
+}
+interface PeerState {
+  clientId: number;
+  user: PeerUser;
+  editingNodeId: string | null;
+}
+
+function Avatar({ name, color, title }: { name: string; color: string; title: string }) {
+  return (
+    <span
+      title={title}
+      className="w-7 h-7 rounded-full text-xs text-white flex items-center justify-center ring-2 ring-white shadow"
+      style={{ background: color }}
+    >
+      {name.slice(0, 1)}
+    </span>
+  );
+}
+
+export function MapCanvas({
+  repo,
+  nodes,
+  provider,
+}: {
+  repo: MapRepository;
+  nodes: NodeView[];
+  provider: HocuspocusProvider | null;
+}) {
+  const user = useAuth((s) => s.user);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [peers, setPeers] = useState<PeerState[]>([]);
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CardData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<Edge>([]);
 
+  // 协作者正在编辑的节点徽标
+  const editingPeers = new Map<string, { name: string; color: string }[]>();
+  for (const p of peers) {
+    if (p.editingNodeId) {
+      const arr = editingPeers.get(p.editingNodeId) ?? [];
+      arr.push({ name: p.user.name, color: p.user.color });
+      editingPeers.set(p.editingNodeId, arr);
+    }
+  }
   setNodeCardContext({
     onRename: (id, title) => repo.rename(id, title),
     editingId,
     setEditingId,
+    editingPeers,
   });
+
+  // Awareness：广播本地 user + 订阅协作者
+  useEffect(() => {
+    if (!provider || !user) return;
+    provider.setAwarenessField('user', {
+      id: user.id,
+      name: user.displayName,
+      color: colorFor(user.id),
+    });
+    const aw = provider.awareness;
+    if (!aw) return;
+    const onChange = () => {
+      const list: PeerState[] = [];
+      aw.getStates().forEach((s, cid) => {
+        if (cid === aw.clientID) return;
+        const st = s as { user?: PeerUser; editingNodeId?: string | null };
+        if (st.user) list.push({ clientId: cid, user: st.user, editingNodeId: st.editingNodeId ?? null });
+      });
+      setPeers(list);
+    };
+    aw.on('change', onChange);
+    onChange();
+    return () => aw.off('change', onChange);
+  }, [provider, user]);
+
+  // Awareness：广播当前选中（正在编辑）节点
+  useEffect(() => {
+    provider?.setAwarenessField('editingNodeId', selectedId);
+  }, [provider, selectedId]);
 
   useEffect(() => {
     const { rfNodes: ln, rfEdges: le } = layout(nodes);
@@ -105,10 +180,18 @@ export function MapCanvas({ repo, nodes }: { repo: MapRepository; nodes: NodeVie
 
   const onNodeClick: NodeMouseHandler<Node<CardData>> = (_e, node) => setSelectedId(node.id);
   const selectedNode = selectedId ? (nodes.find((n) => n.id === selectedId) ?? null) : null;
+  const selfName = user?.displayName ?? '我';
+  const selfColor = user ? colorFor(user.id) : '#888';
 
   return (
     <div className="h-full flex">
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 relative">
+        <div className="absolute top-3 right-3 z-10 flex -space-x-2">
+          <Avatar name={selfName} color={selfColor} title={`${selfName}（我）`} />
+          {peers.map((p) => (
+            <Avatar key={p.clientId} name={p.user.name} color={p.user.color} title={p.user.name} />
+          ))}
+        </div>
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
