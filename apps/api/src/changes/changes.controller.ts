@@ -21,7 +21,11 @@ export class ChangesController {
     @Param('mapId') mapId: string,
     @CurrentUser() user: AuthUser,
     @Query('limit') limit?: string,
+    @Query('node') node?: string,
   ) {
-    return this.svc.list(mapId, user, limit ? Number(limit) : undefined);
+    return this.svc.list(mapId, user, {
+      limit: limit ? Number(limit) : undefined,
+      nodeId: node,
+    });
   }
 }

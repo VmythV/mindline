@@ -64,20 +64,35 @@ export class ChangesService {
     return { accepted: rows.length };
   }
 
-  /** 时间轴/历史查询（M0 基础版：按 map 倒序；过滤与游标分页 M1 完善）。 */
-  async list(mapId: string, ctx: Ctx, limit = 100) {
+  /** 时间轴/历史查询（M1：可选按 nodeId 过滤；附带操作人显示名）。 */
+  async list(mapId: string, ctx: Ctx, opts: { limit?: number; nodeId?: string } = {}) {
     await this.resolveMapAccess(mapId, ctx); // 成员即可（Viewer+）
+    const conds = [eq(schema.changeEvents.mapId, mapId)];
+    if (opts.nodeId) conds.push(eq(schema.changeEvents.nodeId, opts.nodeId));
     const rows = await this.db
-      .select()
+      .select({
+        id: schema.changeEvents.id,
+        nodeId: schema.changeEvents.nodeId,
+        actorId: schema.changeEvents.actorId,
+        actorName: schema.users.displayName,
+        op: schema.changeEvents.op,
+        field: schema.changeEvents.field,
+        before: schema.changeEvents.before,
+        after: schema.changeEvents.after,
+        batchId: schema.changeEvents.batchId,
+        ts: schema.changeEvents.ts,
+      })
       .from(schema.changeEvents)
-      .where(eq(schema.changeEvents.mapId, mapId))
+      .leftJoin(schema.users, eq(schema.users.id, schema.changeEvents.actorId))
+      .where(and(...conds))
       .orderBy(desc(schema.changeEvents.ts))
-      .limit(Math.min(limit, 200));
+      .limit(Math.min(opts.limit ?? 100, 200));
     return {
       items: rows.map((r) => ({
         id: r.id,
         nodeId: r.nodeId,
         actorId: r.actorId,
+        actorName: r.actorName ?? '未知',
         op: r.op,
         field: r.field,
         before: r.before,

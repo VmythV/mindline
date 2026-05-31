@@ -1,13 +1,16 @@
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useMapDoc } from '../map/useMapDoc';
 import { MapCanvas } from '../map/MapCanvas';
+import { TimelinePanel } from '../map/TimelinePanel';
 import type { ProjectDetail } from '../lib/types';
 
 export function MapPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [showTimeline, setShowTimeline] = useState(false);
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api<ProjectDetail>(`/projects/${projectId}`),
@@ -27,14 +30,25 @@ export function MapPage() {
         <span className="ml-auto text-xs text-slate-400">
           {synced ? '● 已连接' : '○ 连接中…'} · Tab 建子 · Enter 建同级 · 双击/F2 改名 · Del 删除 · ⌘Z 撤销
         </span>
+        <button
+          className={`text-sm px-2 py-1 rounded ${showTimeline ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:text-blue-600'}`}
+          onClick={() => setShowTimeline((v) => !v)}
+        >
+          时间轴
+        </button>
       </header>
-      <div className="flex-1 min-h-0">
-        {repo && synced ? (
-          <MapCanvas repo={repo} nodes={nodes} provider={provider} />
-        ) : (
-          <div className="h-full flex items-center justify-center text-slate-400">
-            正在连接协同文档…
-          </div>
+      <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-w-0">
+          {repo && synced ? (
+            <MapCanvas repo={repo} nodes={nodes} provider={provider} />
+          ) : (
+            <div className="h-full flex items-center justify-center text-slate-400">
+              正在连接协同文档…
+            </div>
+          )}
+        </div>
+        {showTimeline && mapId && (
+          <TimelinePanel mapId={mapId} onClose={() => setShowTimeline(false)} />
         )}
       </div>
     </div>

@@ -31,3 +31,21 @@ export interface ProjectDetail extends Project {
   myRole: string;
   memberCount: number;
 }
+
+export interface ChangeEventView {
+  id: string;
+  nodeId: string;
+  actorId: string;
+  actorName: string;
+  op: string;
+  field: string | null;
+  before: unknown;
+  after: unknown;
+  batchId: string | null;
+  ts: number;
+}
+
+export interface ChangeList {
+  items: ChangeEventView[];
+  nextCursor: string | null;
+}

@@ -123,9 +123,9 @@
 > 验收：字段级历史可查；时间轴可过滤；一次 AI 拆解折叠为 1 条批量事件
 
 ### M1.1 Awareness 在线协作
-- [ ] 广播临时状态 user/cursor(nodeId+field+selection)/editingNodeId 📄 Yjs §6
-- [ ] 渲染他人光标/选区彩色 + 「正在编辑」徽标 + 在线头像列表
-- [ ] 断线心跳超时自动清除
+- [x] 广播临时状态 user/cursor(nodeId+field+selection)/editingNodeId 📄 Yjs §6
+- [x] 渲染他人光标/选区彩色 + 「正在编辑」徽标 + 在线头像列表
+- [x] 断线心跳超时自动清除
 
 ### M1.2 变更历史与时间轴
 - [ ] `GET /maps/:mapId/changes`（actor/op/field/batchId/branch/from/to/cursor/limit）📄 API §6
