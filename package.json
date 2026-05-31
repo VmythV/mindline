@@ -16,8 +16,11 @@
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,json,md,yaml,yml}\"",
-    "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down",
+    "infra:up": "bash scripts/infra-up.sh",
+    "infra:down": "bash scripts/infra-down.sh",
+    "services:dev": "bash scripts/services-start.sh fg",
+    "services:start": "bash scripts/services-start.sh bg",
+    "services:stop": "bash scripts/services-stop.sh",
     "db:generate": "pnpm -C packages/db db:generate",
     "db:migrate": "pnpm -C packages/db db:migrate",
     "db:studio": "pnpm -C packages/db db:studio"
