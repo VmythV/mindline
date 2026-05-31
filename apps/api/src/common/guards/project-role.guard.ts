@@ -10,7 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { and, eq } from 'drizzle-orm';
 import type { Role } from '@mindline/shared';
 import { DRIZZLE } from '../../db/db.module';
-import { schema, type Database } from '../../db';
+import { schema, type Database } from '@mindline/db';
 import { MIN_ROLE_KEY } from '../decorators/min-role.decorator';
 import { hasMinRole } from '../roles';
 

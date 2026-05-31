@@ -11,7 +11,7 @@ import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { BUILTIN_NODE_TYPES, newId } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
-import { schema, type Database } from '../db';
+import { schema, type Database } from '@mindline/db';
 
 interface TokenPayload {
   sub: string;

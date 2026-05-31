@@ -8,7 +8,7 @@ import {
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { newId, type Role } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
-import { schema, type Database } from '../db';
+import { schema, type Database } from '@mindline/db';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
 import type { AddMemberDto } from './dto/add-member.dto';

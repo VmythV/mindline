@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { db } from './index';
+import { db } from '@mindline/db';
 
 /** 注入令牌：Drizzle 数据库实例 */
 export const DRIZZLE = 'DRIZZLE';

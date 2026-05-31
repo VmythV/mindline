@@ -9,7 +9,7 @@
   },
   "type": "module",
   "scripts": {
-    "dev": "turbo run build --filter=@mindline/shared && turbo run dev",
+    "dev": "turbo run build --filter=@mindline/shared --filter=@mindline/db && turbo run dev",
     "build": "turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
@@ -17,7 +17,10 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,json,md,yaml,yml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,json,md,yaml,yml}\"",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "db:generate": "pnpm -C packages/db db:generate",
+    "db:migrate": "pnpm -C packages/db db:migrate",
+    "db:studio": "pnpm -C packages/db db:studio"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",

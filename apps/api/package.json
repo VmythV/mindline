@@ -7,13 +7,10 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mindline/db": "workspace:*",
     "@mindline/shared": "workspace:*",
     "@nestjs/common": "^10.4.15",
     "@nestjs/config": "^3.3.0",
@@ -24,7 +21,6 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "drizzle-orm": "^0.38.3",
-    "postgres": "^3.4.5",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },
@@ -32,7 +28,6 @@
     "@nestjs/cli": "^10.4.9",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.2",
-    "drizzle-kit": "^0.30.1",
     "typescript": "^5.7.2"
   }
 }

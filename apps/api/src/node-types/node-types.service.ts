@@ -2,7 +2,7 @@ import { ConflictException, Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull, or } from 'drizzle-orm';
 import { newId } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
-import { schema, type Database } from '../db';
+import { schema, type Database } from '@mindline/db';
 import type { CreateNodeTypeDto } from './dto/create-node-type.dto';
 
 function isUniqueViolation(e: unknown): boolean {
