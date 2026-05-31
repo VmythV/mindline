@@ -38,14 +38,20 @@ export class MapRepository {
     });
   }
 
+  private static readonly STRUCT_KEYS = new Set(['id', 'parentId', 'order', 'type', 'title']);
+
   private toView(ym: YNode): NodeView {
+    const data: Record<string, unknown> = {};
+    ym.forEach((v, k) => {
+      if (!MapRepository.STRUCT_KEYS.has(k)) data[k] = v;
+    });
     return {
       id: ym.get('id') as string,
       parentId: (ym.get('parentId') as string | null) ?? null,
       order: ym.get('order') as string,
       type: (ym.get('type') as string) ?? 'idea',
       title: (ym.get('title') as string) ?? '',
-      desc: (ym.get('desc') as string | undefined) ?? '',
+      data,
     };
   }
 

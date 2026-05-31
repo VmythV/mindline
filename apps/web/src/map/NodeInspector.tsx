@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { EditorContent, useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
 import { api } from '../lib/api';
-import type { ChangeList } from '../lib/types';
+import type { ChangeList, NodeTypeList } from '../lib/types';
 import type { MapRepository } from './MapRepository';
 import type { NodeView } from './types';
+import { DynamicField } from './DynamicField';
 
 const OP_LABEL: Record<string, string> = {
   create: '创建',
@@ -25,27 +24,24 @@ function fmtTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-function ToolbarBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      className="px-2 py-0.5 text-xs rounded bg-slate-100 hover:bg-slate-200"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-    >
-      {label}
-    </button>
-  );
-}
-
-/** 节点详情侧栏：标题 + 轻富文本正文（Tiptap）+ 变更历史。 */
-export function NodeInspector({ repo, node }: { repo: MapRepository; node: NodeView }) {
+/** 节点详情侧栏：标题 + 按类型 Schema 动态渲染字段表单 + 变更历史。 */
+export function NodeInspector({
+  repo,
+  node,
+  projectId,
+}: {
+  repo: MapRepository;
+  node: NodeView;
+  projectId: string;
+}) {
   const [title, setTitle] = useState(node.title);
-  const editor = useEditor({
-    extensions: [StarterKit],
-    content: node.desc ?? '',
-    onUpdate: ({ editor }) => repo.setField(node.id, 'desc', editor.getHTML()),
+
+  const { data: types } = useQuery({
+    queryKey: ['node-types', projectId],
+    queryFn: () => api<NodeTypeList>(`/projects/${projectId}/node-types`),
+    enabled: !!projectId,
   });
+  const def = types?.items.find((t) => t.typeKey === node.type)?.definition;
 
   const { data: history } = useQuery({
     queryKey: ['node-history', repo.mapId, node.id],
@@ -66,22 +62,19 @@ export function NodeInspector({ repo, node }: { repo: MapRepository; node: NodeV
       </div>
 
       <div className="text-xs text-slate-400">
-        类型：<span className="text-slate-600">{node.type}</span>
+        类型：<span className="text-slate-600">{def?.displayName ?? node.type}</span>
       </div>
 
-      <div>
-        <label className="text-xs text-slate-400">正文</label>
-        <div className="mt-1 flex gap-1">
-          <ToolbarBtn label="B" onClick={() => editor?.chain().focus().toggleBold().run()} />
-          <ToolbarBtn label="I" onClick={() => editor?.chain().focus().toggleItalic().run()} />
-          <ToolbarBtn label="•" onClick={() => editor?.chain().focus().toggleBulletList().run()} />
-          <ToolbarBtn label="1." onClick={() => editor?.chain().focus().toggleOrderedList().run()} />
-          <ToolbarBtn label="{}" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} />
+      {def?.fields.map((f) => (
+        <div key={f.key}>
+          <label className="text-xs text-slate-400">{f.label}</label>
+          <DynamicField
+            field={f}
+            value={node.data[f.key]}
+            onChange={(v) => repo.setField(node.id, f.key, v)}
+          />
         </div>
-        <div className="mt-1 border border-slate-200 rounded p-2 text-sm text-slate-800">
-          <EditorContent editor={editor} />
-        </div>
-      </div>
+      ))}
 
       <div>
         <label className="text-xs text-slate-400">历史</label>
@@ -103,9 +96,7 @@ export function NodeInspector({ repo, node }: { repo: MapRepository; node: NodeV
               )}
             </li>
           ))}
-          {history && history.items.length === 0 && (
-            <li className="text-slate-400">暂无历史</li>
-          )}
+          {history && history.items.length === 0 && <li className="text-slate-400">暂无历史</li>}
         </ul>
       </div>
     </aside>

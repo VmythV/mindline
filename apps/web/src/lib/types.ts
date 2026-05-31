@@ -1,3 +1,5 @@
+import type { FieldDef } from '@mindline/shared';
+
 export interface AuthUser {
   id: string;
   tenantId: string;
@@ -48,4 +50,25 @@ export interface ChangeEventView {
 export interface ChangeList {
   items: ChangeEventView[];
   nextCursor: string | null;
+}
+
+export interface NodeTypeDefinition {
+  typeKey: string;
+  displayName: string;
+  icon?: string;
+  color?: string;
+  fields: FieldDef[];
+  aiHints?: string;
+}
+
+export interface NodeTypeItem {
+  id: string;
+  typeKey: string;
+  version: number;
+  scope: string;
+  definition: NodeTypeDefinition;
+}
+
+export interface NodeTypeList {
+  items: NodeTypeItem[];
 }

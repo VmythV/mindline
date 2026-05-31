@@ -49,10 +49,12 @@ export function MapCanvas({
   repo,
   nodes,
   provider,
+  projectId,
 }: {
   repo: MapRepository;
   nodes: NodeView[];
   provider: HocuspocusProvider | null;
+  projectId: string;
 }) {
   const user = useAuth((s) => s.user);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -207,7 +209,9 @@ export function MapCanvas({
           <Controls />
         </ReactFlow>
       </div>
-      {selectedNode && <NodeInspector key={selectedNode.id} repo={repo} node={selectedNode} />}
+      {selectedNode && (
+        <NodeInspector key={selectedNode.id} repo={repo} node={selectedNode} projectId={projectId} />
+      )}
     </div>
   );
 }

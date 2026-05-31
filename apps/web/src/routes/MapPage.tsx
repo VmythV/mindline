@@ -40,7 +40,7 @@ export function MapPage() {
       <div className="flex-1 min-h-0 flex">
         <div className="flex-1 min-w-0">
           {repo && synced ? (
-            <MapCanvas repo={repo} nodes={nodes} provider={provider} />
+            <MapCanvas repo={repo} nodes={nodes} provider={provider} projectId={projectId ?? ''} />
           ) : (
             <div className="h-full flex items-center justify-center text-slate-400">
               正在连接协同文档…

@@ -86,7 +86,7 @@
 - [x] `GET/POST /projects/:id/node-types`；definition 结构校验（typeKey 规范、规范化合并） 📄 API §5、主文档 §3.3
 - [x] 字段类型支持：text/richtext/number/date/datetime/enum/multiEnum/user/link/checkbox/tags（FieldType 已定义于 @mindline/shared）
 - [x] 内置开箱模板：idea/task/objective/keyResult/knowledge/requirement/bug（注册租户自动 seed） 📄 主文档 附录A
-- [ ] 节点详情面板：按 Schema 动态渲染表单（enum→下拉、date→日期、richtext→协同编辑器、user→人员选择…）
+- [x] 节点详情面板：按 Schema 动态渲染表单（enum→下拉、date→日期、richtext→协同编辑器、user→人员选择…）
 
 ### M0.5 Yjs 协同内核（apps/collab）
 - [x] Y.Doc 结构：nodes 扁平 Map（parentId+order+title+data…）+ meta（title 暂 string，Y.Text 后续）📄 Yjs §2
@@ -128,11 +128,11 @@
 - [x] 断线心跳超时自动清除
 
 ### M1.2 变更历史与时间轴
-- [ ] `GET /maps/:mapId/changes`（actor/op/field/batchId/branch/from/to/cursor/limit）📄 API §6
+- [x] `GET /maps/:mapId/changes`（actor/op/field/batchId/branch/from/to/cursor/limit）📄 API §6
 - [ ] `GET /nodes/:nodeId/history`（单节点字段级历史）
 - [ ] `GET /maps/:mapId/snapshot`（只读快照，导出/3D/搜索/AI 上下文用）
-- [ ] 项目级时间轴 UI：横向流，同 batchId 折叠为批量事件（可展开）
-- [ ] 节点历史侧栏（倒序字段级 diff：谁/何时/A→B）
+- [x] 项目级时间轴 UI：横向流，同 batchId 折叠为批量事件（可展开）
+- [x] 节点历史侧栏（倒序字段级 diff：谁/何时/A→B）
 - [ ] 过滤：人 / 操作类型 / 分支(子树) / 时间范围
 - [ ] path_ids 落库 + branch 过滤实现 🔗 D2 📄 数据模型 §4
 
