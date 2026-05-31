@@ -5,6 +5,7 @@ import { DbModule } from './db/db.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { NodeTypesModule } from './node-types/node-types.module';
+import { ChangesModule } from './changes/changes.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { HealthController } from './health.controller';
@@ -16,6 +17,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     ProjectsModule,
     NodeTypesModule,
+    ChangesModule,
   ],
   controllers: [HealthController],
   providers: [
