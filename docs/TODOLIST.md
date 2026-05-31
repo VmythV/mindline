@@ -98,14 +98,14 @@
 - [ ] 前端 children 派生索引（监听 nodes 增量更新，不双写 children）📄 Yjs §2
 
 ### M0.6 命令层（packages/shared + web）
-- [ ] `MapRepository` 封装唯一写入口（对外仅暴露命令 API）📄 Yjs §11
+- [x] `MapRepository` 封装唯一写入口（对外仅暴露命令 API）📄 Yjs §11
 - [ ] 命令：CreateNode/DeleteSubtree/MoveNode/RenameNode/SetField/SetOwner/SetType 📄 Yjs §4.1
-- [ ] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
+- [x] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
 - [ ] 批量命令共享 batchId（删子树）
 - [ ] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方）+ **服务端兜底** ⚠️ 🔗 D1 📄 API §6
 
 ### M0.7 2D 树编辑（web · React Flow）
-- [ ] 自定义节点渲染 + 自动布局（左右展开/径向）+ 手动微调
+- [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
 - [ ] 视口虚拟化（仅渲染可视区 + 缓冲区）
 - [ ] 快捷键：Tab/Enter/Shift+Enter/Delete/方向键/Cmd+.（折叠）📄 主文档 附录B
 - [ ] 拖拽改父 / 改排序
