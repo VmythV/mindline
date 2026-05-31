@@ -5,4 +5,5 @@ export interface NodeView {
   order: string;
   type: string;
   title: string;
+  desc?: string;
 }

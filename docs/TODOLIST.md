@@ -99,7 +99,7 @@
 
 ### M0.6 命令层（packages/shared + web）
 - [x] `MapRepository` 封装唯一写入口（对外仅暴露命令 API）📄 Yjs §11
-- [x] 命令：CreateNode/RenameNode/DeleteSubtree（move/setField/setOwner/setType 待补）📄 Yjs §4.1
+- [x] 命令：CreateNode/RenameNode/DeleteSubtree/MoveNode/SetField（setOwner/setType 待补）📄 Yjs §4.1
 - [x] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
 - [x] 批量命令共享 batchId（删子树）
 - [x] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方已实现；服务端兜底 D1 待补）⚠️ 🔗 D1 📄 API §6
@@ -108,8 +108,8 @@
 - [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
 - [ ] 视口虚拟化（仅渲染可视区 + 缓冲区）
 - [ ] 快捷键：Tab/Enter/Shift+Enter/Delete/方向键/Cmd+.（折叠）📄 主文档 附录B
-- [ ] 拖拽改父 / 改排序
-- [ ] 轻富文本节点正文（Tiptap + y-prosemirror：加粗/斜体/列表/链接/行内代码）📄 主文档 A3
+- [x] 拖拽改父（就近改父，禁止移入自身子树；改排序待细化）
+- [x] 轻富文本节点正文（Tiptap，节点详情侧栏 B/I/列表/代码块；字符级协同 y-prosemirror 后续）📄 主文档 A3
 
 ### M0.8 撤销重做（A9）
 - [x] `Y.UndoManager`（trackedOrigins=本地 origin，captureTimeout=500，仅撤自己）📄 Yjs §5

@@ -45,6 +45,7 @@ export class MapRepository {
       order: ym.get('order') as string,
       type: (ym.get('type') as string) ?? 'idea',
       title: (ym.get('title') as string) ?? '',
+      desc: (ym.get('desc') as string | undefined) ?? '',
     };
   }
 
@@ -122,6 +123,16 @@ export class MapRepository {
     this.onChanges([{ nodeId: id, op: 'rename', before, after: title, ts: Date.now() }]);
   }
 
+  /** 设置结构字段（如富文本正文 desc）。M0 简化：值整体替换同步（非字符级协同）。 */
+  setField(id: string, field: string, value: unknown): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const before = node.get(field);
+    if (before === value) return;
+    this.doc.transact(() => node.set(field, value), this.origin);
+    this.onChanges([{ nodeId: id, op: 'setField', field, before, after: value, ts: Date.now() }]);
+  }
+
   deleteSubtree(id: string): void {
     const all = this.list();
     const toDelete: string[] = [];
@@ -136,6 +147,43 @@ export class MapRepository {
       toDelete.forEach((nid) => this.nodes.delete(nid));
     }, this.origin);
     this.onChanges(toDelete.map((nid) => ({ nodeId: nid, op: 'delete' as ChangeOp, batchId, ts })));
+  }
+
+  /** 判断 maybeChildId 是否在 ancestorId 的子树内（含自身）。 */
+  isDescendant(maybeChildId: string, ancestorId: string): boolean {
+    let cur: string | null = maybeChildId;
+    while (cur) {
+      if (cur === ancestorId) return true;
+      const n = this.nodes.get(cur);
+      cur = n ? ((n.get('parentId') as string | null) ?? null) : null;
+    }
+    return false;
+  }
+
+  /** 移动节点到新父（拖拽改父）；禁止移入自身子树，落到新父末尾。 */
+  moveNode(nodeId: string, newParentId: string): void {
+    if (nodeId === newParentId) return;
+    const node = this.nodes.get(nodeId);
+    if (!node) return;
+    if (this.isDescendant(newParentId, nodeId)) return;
+    const oldParent = (node.get('parentId') as string | null) ?? null;
+    if (oldParent === newParentId) return;
+    const oldOrder = node.get('order') as string;
+    const sibs = this.siblings(newParentId).filter((n) => n.id !== nodeId);
+    const order = generateKeyBetween(sibs[sibs.length - 1]?.order ?? null, null);
+    this.doc.transact(() => {
+      node.set('parentId', newParentId);
+      node.set('order', order);
+    }, this.origin);
+    this.onChanges([
+      {
+        nodeId,
+        op: 'move',
+        before: { parentId: oldParent, order: oldOrder },
+        after: { parentId: newParentId, order },
+        ts: Date.now(),
+      },
+    ]);
   }
 
   /**
