@@ -83,9 +83,9 @@
 - [x] 创建项目时自动建 map（1:1，project.mapId 由 join 得到）📄 数据模型 §3.2
 
 ### M0.4 节点类型 Schema 系统
-- [ ] `GET/POST /projects/:id/node-types`；definition 结构校验 📄 API §5、主文档 §3.3
-- [ ] 字段类型支持：text/richtext/number/date/datetime/enum/multiEnum/user/link/checkbox/tags
-- [ ] 内置开箱模板：idea/task/objective/keyResult/knowledge/requirement/bug 📄 主文档 附录A
+- [x] `GET/POST /projects/:id/node-types`；definition 结构校验（typeKey 规范、规范化合并） 📄 API §5、主文档 §3.3
+- [x] 字段类型支持：text/richtext/number/date/datetime/enum/multiEnum/user/link/checkbox/tags（FieldType 已定义于 @mindline/shared）
+- [x] 内置开箱模板：idea/task/objective/keyResult/knowledge/requirement/bug（注册租户自动 seed） 📄 主文档 附录A
 - [ ] 节点详情面板：按 Schema 动态渲染表单（enum→下拉、date→日期、richtext→协同编辑器、user→人员选择…）
 
 ### M0.5 Yjs 协同内核（apps/collab）

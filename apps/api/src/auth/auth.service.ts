@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
-import { newId } from '@mindline/shared';
+import { BUILTIN_NODE_TYPES, newId } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
 import { schema, type Database } from '../db';
 
@@ -27,7 +27,7 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  /** 注册：开新租户 + owner 用户（M0 简化，email 视为全局唯一）。 */
+  /** 注册：开新租户 + owner 用户 + 内置节点类型模板（M0 简化，email 视为全局唯一）。 */
   async register(dto: {
     email: string;
     password: string;
@@ -57,6 +57,17 @@ export class AuthService {
         passwordHash,
         status: 'active',
       });
+      // 复制内置节点类型为该租户的全局模板（project_id = null）
+      await tx.insert(schema.nodeTypeSchemas).values(
+        BUILTIN_NODE_TYPES.map((def) => ({
+          id: newId('nodeType'),
+          tenantId,
+          projectId: null,
+          typeKey: def.typeKey,
+          definition: def,
+          version: 1,
+        })),
+      );
     });
 
     return {
@@ -121,14 +132,8 @@ export class AuthService {
     const accessTtl = Number(this.config.get<string>('JWT_EXPIRES_IN') ?? 3600);
     const refreshTtl = Number(this.config.get<string>('JWT_REFRESH_EXPIRES_IN') ?? 2592000);
     const base = { sub: userId, tenantId };
-    const accessToken = this.jwt.sign(
-      { ...base, type: 'access' },
-      { expiresIn: accessTtl },
-    );
-    const refreshToken = this.jwt.sign(
-      { ...base, type: 'refresh' },
-      { expiresIn: refreshTtl },
-    );
+    const accessToken = this.jwt.sign({ ...base, type: 'access' }, { expiresIn: accessTtl });
+    const refreshToken = this.jwt.sign({ ...base, type: 'refresh' }, { expiresIn: refreshTtl });
     return { accessToken, refreshToken, expiresIn: accessTtl };
   }
 }

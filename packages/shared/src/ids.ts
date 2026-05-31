@@ -11,6 +11,7 @@ export const ID_PREFIX = {
   project: 'p_',
   map: 'm_',
   node: 'n_',
+  nodeType: 'nt_',
   changeEvent: 'c_',
   batch: 'b_',
   milestone: 'ms_',
