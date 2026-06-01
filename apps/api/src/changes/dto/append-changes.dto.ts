@@ -13,6 +13,9 @@ import { CHANGE_OPS, type ChangeOp } from '@mindline/shared';
 
 class ChangeEventInput {
   @IsString()
+  eventId!: string;
+
+  @IsString()
   nodeId!: string;
 
   @IsIn(CHANGE_OPS as readonly string[])

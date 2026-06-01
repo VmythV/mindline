@@ -85,7 +85,7 @@ export class ProjectsService {
     return { items: rows, nextCursor: null };
   }
 
-  async get(id: string, myRole: Role) {
+  async get(id: string, tenantId: string, myRole: Role) {
     const rows = await this.db
       .select({
         id: schema.projects.id,
@@ -97,7 +97,8 @@ export class ProjectsService {
       })
       .from(schema.projects)
       .leftJoin(schema.maps, eq(schema.maps.projectId, schema.projects.id))
-      .where(eq(schema.projects.id, id))
+      // 约定④：逐查询强制 tenant scope（ProjectRoleGuard 之外的纵深防御）
+      .where(and(eq(schema.projects.id, id), eq(schema.projects.tenantId, tenantId)))
       .limit(1);
     const p = rows[0];
     if (!p) throw new NotFoundException('项目不存在');
@@ -108,19 +109,24 @@ export class ProjectsService {
     return { ...p, myRole, memberCount: Number(c[0]?.n ?? 0) };
   }
 
-  async update(id: string, dto: UpdateProjectDto, myRole: Role) {
+  async update(id: string, dto: UpdateProjectDto, tenantId: string, myRole: Role) {
     const patch: Partial<typeof schema.projects.$inferInsert> = {};
     if (dto.name !== undefined) patch.name = dto.name;
     if (dto.archived !== undefined) patch.archived = dto.archived;
     if (dto.inheritMembers !== undefined) patch.inheritMembers = dto.inheritMembers;
     if (Object.keys(patch).length > 0) {
-      await this.db.update(schema.projects).set(patch).where(eq(schema.projects.id, id));
+      await this.db
+        .update(schema.projects)
+        .set(patch)
+        .where(and(eq(schema.projects.id, id), eq(schema.projects.tenantId, tenantId)));
     }
-    return this.get(id, myRole);
+    return this.get(id, tenantId, myRole);
   }
 
-  async remove(id: string) {
-    await this.db.delete(schema.projects).where(eq(schema.projects.id, id));
+  async remove(id: string, tenantId: string) {
+    await this.db
+      .delete(schema.projects)
+      .where(and(eq(schema.projects.id, id), eq(schema.projects.tenantId, tenantId)));
   }
 
   async listMembers(projectId: string) {

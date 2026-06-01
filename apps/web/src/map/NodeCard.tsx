@@ -12,6 +12,7 @@ interface NodeCardContext {
   editingId: string | null;
   setEditingId: (id: string | null) => void;
   editingPeers: Map<string, PeerBadge[]>;
+  onToggleCollapse?: (id: string) => void;
   shadow?: {
     toggle: (tempId: string, accept: boolean) => void;
     edit: (tempId: string, title: string) => void;
@@ -35,7 +36,9 @@ function NodeCardImpl({ id, data, selected }: NodeProps) {
     return (
       <div
         className={`relative px-3 py-2 rounded-lg border-2 border-dashed text-sm min-w-[120px] max-w-[220px] ${
-          accepted ? 'border-emerald-400 bg-emerald-50/70' : 'border-slate-300 bg-white/50 opacity-60'
+          accepted
+            ? 'border-emerald-400 bg-emerald-50/70'
+            : 'border-slate-300 bg-white/50 opacity-60'
         }`}
       >
         <Handle type="target" position={Position.Left} className="!bg-slate-300" />
@@ -113,6 +116,20 @@ function NodeCardImpl({ id, data, selected }: NodeProps) {
         <span className="block truncate text-slate-800">{node.title || '未命名'}</span>
       )}
       <Handle type="source" position={Position.Right} className="!bg-slate-300" />
+
+      {/* 折叠柄：折叠态显示 ▸N（隐藏的直接子节点数），点击等价 Cmd+. */}
+      {(cardData.childCount ?? 0) > 0 && (
+        <button
+          title={cardData.collapsed ? '展开子树' : '折叠子树'}
+          onClick={(e) => {
+            e.stopPropagation();
+            ctx?.onToggleCollapse?.(id);
+          }}
+          className="absolute top-1/2 -right-3 -translate-y-1/2 px-1 h-4 rounded bg-slate-100 hover:bg-slate-200 text-[9px] leading-4 text-slate-500"
+        >
+          {cardData.collapsed ? `▸${cardData.childCount}` : '▾'}
+        </button>
+      )}
 
       {peers.length > 0 && (
         <div className="absolute -top-2 -right-1 flex -space-x-1">

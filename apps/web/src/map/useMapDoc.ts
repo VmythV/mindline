@@ -4,10 +4,10 @@ import { HocuspocusProvider } from '@hocuspocus/provider';
 import { useAuth } from '../stores/auth';
 import { api } from '../lib/api';
 import { MapRepository, type EmitEvent } from './MapRepository';
+import { ChangeQueue, type QueuedEvent } from './changeQueue';
 import type { NodeView } from './types';
 
-const COLLAB_URL =
-  (import.meta.env.VITE_COLLAB_URL as string | undefined) ?? 'ws://localhost:3002';
+const COLLAB_URL = (import.meta.env.VITE_COLLAB_URL as string | undefined) ?? 'ws://localhost:3002';
 
 interface MapDocState {
   repo: MapRepository | null;
@@ -33,14 +33,11 @@ export function useMapDoc(mapId: string | undefined): MapDocState {
     const provider = new HocuspocusProvider({ url: COLLAB_URL, name: mapId, token, document: doc });
     providerRef.current = provider;
 
-    const onChanges = (events: EmitEvent[]) => {
-      void api(`/maps/${mapId}/changes`, {
-        method: 'POST',
-        body: JSON.stringify({ events }),
-      }).catch(() => {
-        /* 落库失败不阻塞编辑（M0；可靠性兜底见 TODOLIST D1） */
-      });
-    };
+    // D1：持久重试队列承接落库（带稳定 eventId，服务端幂等去重）；不再即发即弃。
+    const queue = new ChangeQueue(mapId, (events: QueuedEvent[]) =>
+      api(`/maps/${mapId}/changes`, { method: 'POST', body: JSON.stringify({ events }) }),
+    );
+    const onChanges = (events: EmitEvent[]) => queue.enqueue(events);
 
     const repo = new MapRepository(mapId, doc, onChanges);
     repoRef.current = repo;
@@ -53,9 +50,17 @@ export function useMapDoc(mapId: string | undefined): MapDocState {
       repo.ensureRoot();
       setSynced(true);
       update();
+      void queue.flush(); // 同步完成 → 冲刷上次残留（刷新/关页重开场景）
     });
+    // 断线重连恢复连接时补发积压事件
+    const onStatus = (e: { status: string }) => {
+      if (e.status === 'connected') void queue.flush();
+    };
+    provider.on('status', onStatus);
 
     return () => {
+      provider.off('status', onStatus);
+      queue.dispose();
       nodesMap.unobserveDeep(update);
       provider.destroy();
       doc.destroy();

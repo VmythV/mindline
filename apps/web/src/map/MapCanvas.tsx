@@ -90,9 +90,19 @@ export function MapCanvas({
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [preview, setPreview] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CardData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<Edge>([]);
   const ai = useProposal(repo);
+
+  const toggleCollapse = useCallback((id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const editingPeers = new Map<string, { name: string; color: string }[]>();
   for (const p of peers) {
@@ -107,6 +117,7 @@ export function MapCanvas({
     editingId,
     setEditingId,
     editingPeers,
+    onToggleCollapse: toggleCollapse,
     shadow: { toggle: ai.toggle, edit: ai.edit },
   });
 
@@ -124,7 +135,8 @@ export function MapCanvas({
       aw.getStates().forEach((s, cid) => {
         if (cid === aw.clientID) return;
         const st = s as { user?: PeerUser; editingNodeId?: string | null };
-        if (st.user) list.push({ clientId: cid, user: st.user, editingNodeId: st.editingNodeId ?? null });
+        if (st.user)
+          list.push({ clientId: cid, user: st.user, editingNodeId: st.editingNodeId ?? null });
       });
       setPeers(list);
     };
@@ -138,10 +150,10 @@ export function MapCanvas({
   }, [provider, selectedId]);
 
   useEffect(() => {
-    const { rfNodes: ln, rfEdges: le } = layout(nodes);
+    const { rfNodes: ln, rfEdges: le } = layout(nodes, collapsed);
     setRfNodes(ln.map((n) => ({ ...n, selected: n.id === selectedId })));
     setRfEdges(le);
-  }, [nodes, selectedId, setRfNodes, setRfEdges]);
+  }, [nodes, selectedId, collapsed, setRfNodes, setRfEdges]);
 
   const onNodeDragStop: OnNodeDrag<Node<CardData>> = useCallback(
     (_e, dragged) => {
@@ -192,8 +204,36 @@ export function MapCanvas({
         repo.redo();
         return;
       }
+      if (mod && e.key === '.') {
+        e.preventDefault();
+        if (selectedId) toggleCollapse(selectedId);
+        return;
+      }
 
       if (!selectedId) return;
+
+      // ↑↓←→ 节点导航（附录B）：同级上下移、← 选父、→ 选首个子（展开态）
+      if (e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        const cur = nodes.find((n) => n.id === selectedId);
+        if (!cur) return;
+        const sorted = (arr: NodeView[]) =>
+          arr.slice().sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
+        if (e.key === 'ArrowLeft') {
+          if (cur.parentId) setSelectedId(cur.parentId);
+        } else if (e.key === 'ArrowRight') {
+          if (!collapsed.has(cur.id)) {
+            const kids = sorted(nodes.filter((n) => n.parentId === cur.id));
+            if (kids[0]) setSelectedId(kids[0].id);
+          }
+        } else {
+          const sibs = sorted(nodes.filter((n) => n.parentId === cur.parentId));
+          const idx = sibs.findIndex((n) => n.id === cur.id);
+          const target = e.key === 'ArrowUp' ? sibs[idx - 1] : sibs[idx + 1];
+          if (target) setSelectedId(target.id);
+        }
+        return;
+      }
 
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -215,7 +255,7 @@ export function MapCanvas({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, repo]);
+  }, [selectedId, repo, nodes, collapsed, toggleCollapse]);
 
   const onNodeClick: NodeMouseHandler<Node<CardData>> = (_e, node) => setSelectedId(node.id);
   const onNodeContextMenu: NodeMouseHandler<Node<CardData>> = (e, node) => {
@@ -280,10 +320,25 @@ export function MapCanvas({
 
   const paletteActions: PaletteCommand[] = selectedId
     ? [
-        { id: 'child', label: '＋ 新建子节点', hint: 'Tab', run: () => setSelectedId(repo.createChild(selectedId)) },
-        { id: 'sibling', label: '＋ 新建同级节点', hint: 'Enter', run: () => setSelectedId(repo.createSibling(selectedId)) },
+        {
+          id: 'child',
+          label: '＋ 新建子节点',
+          hint: 'Tab',
+          run: () => setSelectedId(repo.createChild(selectedId)),
+        },
+        {
+          id: 'sibling',
+          label: '＋ 新建同级节点',
+          hint: 'Enter',
+          run: () => setSelectedId(repo.createSibling(selectedId)),
+        },
         { id: 'rename', label: '✎ 重命名选中', hint: 'F2', run: () => setEditingId(selectedId) },
-        { id: 'decompose', label: '🤖 AI 拆解此节点', hint: '', run: () => startDecompose(selectedId) },
+        {
+          id: 'decompose',
+          label: '🤖 AI 拆解此节点',
+          hint: '',
+          run: () => startDecompose(selectedId),
+        },
         {
           id: 'delete',
           label: '🗑 删除选中（含子树）',
@@ -299,7 +354,13 @@ export function MapCanvas({
   const ctxItems = (nodeId: string): ContextMenuItem[] => [
     { label: '新建子节点', run: () => setSelectedId(repo.createChild(nodeId)) },
     { label: '新建同级节点', run: () => setSelectedId(repo.createSibling(nodeId)) },
-    { label: '重命名', run: () => { setSelectedId(nodeId); setEditingId(nodeId); } },
+    {
+      label: '重命名',
+      run: () => {
+        setSelectedId(nodeId);
+        setEditingId(nodeId);
+      },
+    },
     { label: '🤖 AI 拆解', run: () => startDecompose(nodeId) },
     {
       label: '删除（含子树）',
@@ -323,8 +384,7 @@ export function MapCanvas({
         {ai.proposal && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-lg border border-slate-200 px-3 py-2 flex items-center gap-2 text-xs">
             <span className="text-slate-600">
-              🤖 拆解预览 {ai.proposal.ops.length} 项
-              {ai.running ? ' · 生成中…' : ''}
+              🤖 拆解预览 {ai.proposal.ops.length} 项{ai.running ? ' · 生成中…' : ''}
               {ai.error ? ` · ${ai.error}` : ''}
             </span>
             <button
@@ -373,7 +433,12 @@ export function MapCanvas({
         </ReactFlow>
       </div>
       {selectedNode && (
-        <NodeInspector key={selectedNode.id} repo={repo} node={selectedNode} projectId={projectId} />
+        <NodeInspector
+          key={selectedNode.id}
+          repo={repo}
+          node={selectedNode}
+          projectId={projectId}
+        />
       )}
 
       {paletteOpen && (

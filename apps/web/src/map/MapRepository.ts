@@ -71,7 +71,13 @@ export class MapRepository {
       .sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0));
   }
 
-  private makeNode(id: string, parentId: string | null, order: string, type: string, title: string) {
+  private makeNode(
+    id: string,
+    parentId: string | null,
+    order: string,
+    type: string,
+    title: string,
+  ) {
     const ym: YNode = new Y.Map();
     ym.set('id', id);
     ym.set('parentId', parentId);
@@ -90,7 +96,15 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, null, order, 'idea', '中心主题'));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title: '中心主题', parentId: null }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'create',
+        after: { title: '中心主题', parentId: null },
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
     return id;
   }
 
@@ -102,7 +116,15 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, parentId, order, 'idea', title));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'create',
+        after: { title, parentId },
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
     return id;
   }
 
@@ -120,7 +142,15 @@ export class MapRepository {
     this.doc.transact(() => {
       this.nodes.set(id, this.makeNode(id, parentId, order, 'idea', title));
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'create', after: { title, parentId }, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'create',
+        after: { title, parentId },
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
     return id;
   }
 
@@ -130,7 +160,16 @@ export class MapRepository {
     const before = node.get('title') as string;
     if (before === title) return;
     this.doc.transact(() => node.set('title', title), this.origin);
-    this.onChanges([{ nodeId: id, op: 'rename', before, after: title, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'rename',
+        before,
+        after: title,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
   }
 
   /** 设置结构字段（如富文本正文 desc）。M0 简化：值整体替换同步（非字符级协同）。 */
@@ -140,7 +179,17 @@ export class MapRepository {
     const before = node.get(field);
     if (before === value) return;
     this.doc.transact(() => node.set(field, value), this.origin);
-    this.onChanges([{ nodeId: id, op: 'setField', field, before, after: value, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setField',
+        field,
+        before,
+        after: value,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
   }
 
   /**
@@ -165,7 +214,17 @@ export class MapRepository {
       node.set('type', newType);
       node.set('_deprecatedFields', merged);
     }, this.origin);
-    this.onChanges([{ nodeId: id, op: 'setField', field: 'type', before, after: newType, pathIds: this.getAncestorIds(id), ts: Date.now() }]);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setField',
+        field: 'type',
+        before,
+        after: newType,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
   }
 
   deleteSubtree(id: string): void {
@@ -296,13 +355,124 @@ export class MapRepository {
 
   /**
    * 撤销 / 重做（A9）。UndoManager 已限定 trackedOrigins=本地 origin，故只撤自己的操作。
-   * 注：撤销/重做的补偿 ChangeEvent 落库待后续完善（当前仅恢复文档结构与协同同步）。
+   * 通过「前后快照 diff」反推补偿 ChangeEvent 落库 —— 撤销/重做后文档与时间轴保持一致。
+   * 整次撤销/重做归一个 batchId（时间轴折叠为一条批量事件）。
    */
   undo(): void {
+    const before = this.snapshot();
     this.undoManager.undo();
+    this.emitDiff(before, this.snapshot());
   }
 
   redo(): void {
+    const before = this.snapshot();
     this.undoManager.redo();
+    this.emitDiff(before, this.snapshot());
+  }
+
+  /** 全量节点视图按 id 索引（撤销/重做 diff 用）。 */
+  private snapshot(): Map<string, NodeView> {
+    const m = new Map<string, NodeView>();
+    for (const v of this.list()) m.set(v.id, v);
+    return m;
+  }
+
+  /** 从快照（而非当前文档）回溯祖先链 —— 供已被删除的节点计算 pathIds。 */
+  private ancestorIdsFromSnap(snap: Map<string, NodeView>, nodeId: string): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>([nodeId]);
+    let pid = snap.get(nodeId)?.parentId ?? null;
+    while (pid && !seen.has(pid)) {
+      out.push(pid);
+      seen.add(pid);
+      pid = snap.get(pid)?.parentId ?? null;
+    }
+    return out;
+  }
+
+  /** 对比撤销/重做前后两份快照，产出补偿 ChangeEvent（共享 batchId）。 */
+  private emitDiff(before: Map<string, NodeView>, after: Map<string, NodeView>): void {
+    const batchId = newId('batch');
+    const ts = Date.now();
+    const events: EmitEvent[] = [];
+    const differs = (a: unknown, b: unknown) =>
+      JSON.stringify(a ?? null) !== JSON.stringify(b ?? null);
+
+    // 删除：before 有、after 无（pathIds 取 before 态，因节点已不在文档）
+    for (const [id] of before) {
+      if (!after.has(id)) {
+        events.push({
+          nodeId: id,
+          op: 'delete',
+          batchId,
+          pathIds: this.ancestorIdsFromSnap(before, id),
+          ts,
+        });
+      }
+    }
+    for (const [id, a] of after) {
+      const b = before.get(id);
+      const pathIds = this.getAncestorIds(id);
+      if (!b) {
+        events.push({
+          nodeId: id,
+          op: 'create',
+          after: { title: a.title, parentId: a.parentId },
+          batchId,
+          pathIds,
+          ts,
+        });
+        continue;
+      }
+      if (b.title !== a.title) {
+        events.push({
+          nodeId: id,
+          op: 'rename',
+          before: b.title,
+          after: a.title,
+          batchId,
+          pathIds,
+          ts,
+        });
+      }
+      if (b.type !== a.type) {
+        events.push({
+          nodeId: id,
+          op: 'setField',
+          field: 'type',
+          before: b.type,
+          after: a.type,
+          batchId,
+          pathIds,
+          ts,
+        });
+      }
+      if (b.parentId !== a.parentId || b.order !== a.order) {
+        events.push({
+          nodeId: id,
+          op: 'move',
+          before: { parentId: b.parentId, order: b.order },
+          after: { parentId: a.parentId, order: a.order },
+          batchId,
+          pathIds,
+          ts,
+        });
+      }
+      for (const k of new Set([...Object.keys(b.data), ...Object.keys(a.data)])) {
+        if (differs(b.data[k], a.data[k])) {
+          events.push({
+            nodeId: id,
+            op: 'setField',
+            field: k,
+            before: b.data[k],
+            after: a.data[k],
+            batchId,
+            pathIds,
+            ts,
+          });
+        }
+      }
+    }
+    if (events.length) this.onChanges(events);
   }
 }
