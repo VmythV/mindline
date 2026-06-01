@@ -1,7 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
-import { newId, type NodeSnapshot, type Role } from '@mindline/shared';
+import { type NodeSnapshot, type Role } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
 import { hasMinRole } from '../common/roles';
@@ -98,7 +98,7 @@ export class ChangesService {
     if (!hasMinRole(role, 'editor')) throw new ForbiddenException('需要编辑权限');
 
     const rows = dto.events.map((e) => ({
-      id: newId('changeEvent'),
+      id: e.eventId, // D1：客户端稳定主键，重试幂等去重
       tenantId: ctx.tenantId,
       projectId,
       mapId,
@@ -112,7 +112,10 @@ export class ChangesService {
       pathIds: e.pathIds ?? null,
       ts: new Date(e.ts),
     }));
-    await this.db.insert(schema.changeEvents).values(rows);
+    // onConflictDoNothing：重复冲刷同一 eventId 不产生重复行（at-least-once + 幂等）
+    await this.db.insert(schema.changeEvents).values(rows).onConflictDoNothing({
+      target: schema.changeEvents.id,
+    });
     return { accepted: rows.length };
   }
 
@@ -188,10 +191,7 @@ export class ChangesService {
       .select({ mapId: schema.changeEvents.mapId })
       .from(schema.changeEvents)
       .where(
-        and(
-          eq(schema.changeEvents.nodeId, nodeId),
-          eq(schema.changeEvents.tenantId, ctx.tenantId),
-        ),
+        and(eq(schema.changeEvents.nodeId, nodeId), eq(schema.changeEvents.tenantId, ctx.tenantId)),
       )
       .limit(1);
     const mapId = found[0]?.mapId;

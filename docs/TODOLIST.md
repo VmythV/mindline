@@ -18,7 +18,7 @@
 
 > 这些决策会影响下方任务的实现方式，建议在进入对应里程碑前确认。详见各条出处。
 
-- [ ] **D1 · ChangeEvent 落库可靠性** ⚠️：现方案"发起方客户端异步落库、远端不重复派生"，发起方掉线/失败可能丢事件。是否在 M0 加服务端兜底（onStoreDocument/update 流补偿 或 落库重试队列）？ 📄 Yjs §4.3 / §10
+- [~] **D1 · ChangeEvent 落库可靠性** ⚠️：✅ 已加**客户端持久重试队列 + 幂等插入**（`changeQueue.ts`：内存+localStorage 双写、指数退避、重连/重载冲刷；服务端按 `eventId` onConflictDoNothing 去重）→ 覆盖抖动/短断线/刷新/关页。残留：浏览器硬崩溃未落盘的极窄窗口；collab 服务端语义反推兜底仍待后续。 📄 Yjs §4.3 / §10
 - [x] **D2 · path_ids 维护策略**：✅ 已定「记录事件发生时的祖先链」（落库冗余、不随移动回改；branch 过滤走 ix_changes_path GIN）。 📄 数据模型 §7、API §12
 - [x] **D3 · ID 生成**：✅ ULID + 前缀，应用层 `newId()` 生成，不做 DB 兜底。 📄 数据模型 §7
 - [x] **D4 · 配置加密方案**：✅ 已定 AES-256-GCM + env 主密钥（`AI_CONFIG_SECRET`）；DB 仅存密文，仅加密 apiKey。 📄 数据模型 §7
@@ -102,18 +102,18 @@
 - [x] 命令：CreateNode/RenameNode/DeleteSubtree/MoveNode/SetField（setOwner/setType 待补）📄 Yjs §4.1
 - [x] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
 - [x] 批量命令共享 batchId（删子树）
-- [x] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方已实现；服务端兜底 D1 待补）⚠️ 🔗 D1 📄 API §6
+- [x] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方持久重试队列 + 服务端 eventId 幂等去重；collab 语义反推兜底待后续）🔗 D1 📄 API §6
 
 ### M0.7 2D 树编辑（web · React Flow）
 - [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
 - [ ] 视口虚拟化（仅渲染可视区 + 缓冲区）
-- [ ] 快捷键：Tab/Enter/Shift+Enter/Delete/方向键/Cmd+.（折叠）📄 主文档 附录B
+- [x] 快捷键：Tab/Enter/Delete/方向键导航/Cmd+.（折叠子树）/F2/Space/Cmd+Z 📄 主文档 附录B（注：Shift+Enter 属节点内换行，归富文本编辑器）
 - [x] 拖拽改父（就近改父，禁止移入自身子树；改排序待细化）
 - [x] 轻富文本节点正文（Tiptap，节点详情侧栏 B/I/列表/代码块；字符级协同 y-prosemirror 后续）📄 主文档 A3
 
 ### M0.8 撤销重做（A9）
 - [x] `Y.UndoManager`（trackedOrigins=本地 origin，captureTimeout=500，仅撤自己）📄 Yjs §5
-- [ ] 撤销/重做产出补偿 ChangeEvent；复合命令用 `stopCapturing()` 封为单 undo 单元
+- [x] 撤销/重做产出补偿 ChangeEvent（前后快照 diff 反推 create/delete/rename/move/setField，整次归一 batchId）；复合命令 `stopCapturing()` 待细化
 
 ---
 
@@ -137,7 +137,7 @@
 - [x] path_ids 落库 + branch 过滤实现 🔗 D2 📄 数据模型 §4
 
 ### M1.3 交互体系
-- [x] 快捷键完整清单 📄 主文档 附录B
+- [x] 快捷键完整清单（Tab/Enter/Delete/方向键/Cmd+./F2/Space/Cmd+K/Cmd+F/Cmd+Z；`/` 召唤 AI 待补）📄 主文档 附录B
 - [x] 右键上下文菜单 📄 主文档 附录C
 - [x] `Space` 节点预览卡片（只读速览）
 - [x] `Cmd+K` 命令面板（模糊搜索并执行主要命令）

@@ -37,23 +37,28 @@ export class ProjectsController {
 
   @UseGuards(ProjectRoleGuard)
   @Get('projects/:id')
-  get(@Param('id') id: string, @ProjectRole() role: Role) {
-    return this.projects.get(id, role);
+  get(@Param('id') id: string, @CurrentUser() user: AuthUser, @ProjectRole() role: Role) {
+    return this.projects.get(id, user.tenantId, role);
   }
 
   @UseGuards(ProjectRoleGuard)
   @MinRole('admin')
   @Patch('projects/:id')
-  update(@Param('id') id: string, @Body() dto: UpdateProjectDto, @ProjectRole() role: Role) {
-    return this.projects.update(id, dto, role);
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateProjectDto,
+    @ProjectRole() role: Role,
+  ) {
+    return this.projects.update(id, dto, user.tenantId, role);
   }
 
   @UseGuards(ProjectRoleGuard)
   @MinRole('owner')
   @HttpCode(204)
   @Delete('projects/:id')
-  remove(@Param('id') id: string) {
-    return this.projects.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.projects.remove(id, user.tenantId);
   }
 
   @UseGuards(ProjectRoleGuard)
