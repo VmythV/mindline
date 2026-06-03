@@ -35,7 +35,9 @@
 - [x] 初始化 monorepo：`apps/web`(前端) `apps/api`(NestJS) `apps/collab`(Hocuspocus) `packages/shared`(共享类型/契约) 🔗 D6
 - [x] TypeScript 基础配置（tsconfig base、路径别名、严格模式）
 - [x] ESLint + Prettier 统一规范
-- [ ] **自定义 ESLint 规则 + CI 静态检查：禁止业务层直接 import yjs 写类型（强制走命令层）** ⚠️ 📄 Yjs §11
+- [~] **自定义 ESLint 规则 + CI 静态检查：禁止业务层直接 import yjs 写类型（强制走命令层）** ⚠️ 📄 Yjs §11
+  - ✅ ESLint 规则已启用（`eslint.config.mjs`：`apps/web/src/**` 除 `map/**` 外禁止 `import 'yjs'`，违规报中文提示；全仓 lint 通过、探针验证可拦截）
+  - [ ] CI 静态检查接入（待 0.3 CI 流水线）
 - [ ] 测试框架（Vitest）+ 提交规范（husky/lint-staged，可选）
 
 ### 0.2 本地基础设施
