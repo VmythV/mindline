@@ -38,7 +38,9 @@
 - [~] **自定义 ESLint 规则 + CI 静态检查：禁止业务层直接 import yjs 写类型（强制走命令层）** ⚠️ 📄 Yjs §11
   - ✅ ESLint 规则已启用（`eslint.config.mjs`：`apps/web/src/**` 除 `map/**` 外禁止 `import 'yjs'`，违规报中文提示；全仓 lint 通过、探针验证可拦截）
   - [ ] CI 静态检查接入（待 0.3 CI 流水线）
-- [ ] 测试框架（Vitest）+ 提交规范（husky/lint-staged，可选）
+- [~] 测试框架（Vitest）+ 提交规范（husky/lint-staged，可选）
+  - ✅ Vitest 接入（api / shared，根 `pnpm test` 经 turbo 编排；详见「贯穿性事项·测试」）
+  - [ ] husky/lint-staged 提交规范（可选，未做）
 
 ### 0.2 本地基础设施
 - [x] Docker Compose：Postgres 14+ / Redis / MinIO（+ 可选 AI 网关）一键拉起 📄 主文档 §5.2
@@ -239,7 +241,10 @@
 
 ## 贯穿性事项（全程并行）
 
-- [ ] **测试**：单元 / 集成 / E2E（协同多端、AI 校验与降级、迁移回滚、权限矩阵、人员替换幂等）
+- [~] **测试**：单元 / 集成 / E2E（协同多端、AI 校验与降级、迁移回滚、权限矩阵、人员替换幂等）
+  - ✅ Vitest 已接入（`apps/api` / `packages/shared` 各配 `vitest.config.ts` + `test` script；根 `pnpm test` 经 turbo 编排）
+  - ✅ 后端纯逻辑首批单测（26 用例）：`buildProposal`（AI 校验流水线，17）、`hasMinRole`/`ROLE_RANK`（权限等级，4）、`newId`（ID 前缀，5）
+  - [ ] web 命令层（MapRepository diff 反推，需 jsdom + Y.Doc）/ 集成 / E2E / AI 降级 / 迁移回滚 / 人员替换幂等 待后续
 - [ ] **可观测性**：日志/指标/链路；AI 请求日志可验证含父链+兄弟标题 📄 AI §9
 - [ ] **安全**：JWT、租户行级隔离、TLS、附件签名 URL、配置加密、审计（change_events 即审计流）📄 主文档 §6
 - [ ] **国际化**：文案外置，首版中文，预留多语言
