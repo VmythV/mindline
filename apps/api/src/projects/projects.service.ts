@@ -9,6 +9,7 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 import { newId, type Role } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
 import { schema, type Database } from '@mindline/db';
+import { hasMinRole } from '../common/roles';
 import type { CreateProjectDto } from './dto/create-project.dto';
 import type { UpdateProjectDto } from './dto/update-project.dto';
 import type { AddMemberDto } from './dto/add-member.dto';
@@ -194,5 +195,22 @@ export class ProjectsService {
           eq(schema.projectMembers.userId, userId),
         ),
       );
+  }
+
+  getPermissions(role: Role) {
+    return {
+      role,
+      can: {
+        edit: hasMinRole(role, 'editor'),
+        comment: hasMinRole(role, 'commenter'),
+        aiWrite: hasMinRole(role, 'editor'),
+        manageMembers: hasMinRole(role, 'admin'),
+        editSchema: hasMinRole(role, 'admin'),
+        runMigration: hasMinRole(role, 'admin'),
+        transfer: hasMinRole(role, 'admin'),
+        publishIM: hasMinRole(role, 'editor'),
+        deleteProject: role === 'owner',
+      },
+    };
   }
 }

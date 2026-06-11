@@ -20,6 +20,7 @@ import { CommandPalette, type PaletteCommand } from './CommandPalette';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { MapRepository } from './MapRepository';
 import { useProposal } from './useProposal';
+import { useViewFilter } from './useViewFilter';
 import type { NodeView } from './types';
 
 const nodeTypes = { card: NodeCard };
@@ -94,6 +95,7 @@ export function MapCanvas({
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CardData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<Edge>([]);
   const ai = useProposal(repo);
+  const viewFilter = useViewFilter(user?.id ?? '');
 
   const toggleCollapse = useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -112,15 +114,6 @@ export function MapCanvas({
       editingPeers.set(p.editingNodeId, arr);
     }
   }
-  setNodeCardContext({
-    onRename: (id, title) => repo.rename(id, title),
-    editingId,
-    setEditingId,
-    editingPeers,
-    onToggleCollapse: toggleCollapse,
-    shadow: { toggle: ai.toggle, edit: ai.edit },
-  });
-
   useEffect(() => {
     if (!provider || !user) return;
     provider.setAwarenessField('user', {
@@ -149,11 +142,41 @@ export function MapCanvas({
     provider?.setAwarenessField('editingNodeId', selectedId);
   }, [provider, selectedId]);
 
+  // 计算每个节点的 effectivePrivate（继承最近祖先的 private 标记）
+  const nodesWithPrivate = useMemo(() => {
+    const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    return nodes.map((n) => {
+      if (n.private) return { ...n, effectivePrivate: true };
+      let cur = nodeMap.get(n.parentId ?? '');
+      while (cur) {
+        if (cur.private) return { ...n, effectivePrivate: true };
+        cur = nodeMap.get(cur.parentId ?? '');
+      }
+      return { ...n, effectivePrivate: false };
+    });
+  }, [nodes]);
+
+  const filterStatus = useMemo(
+    () => viewFilter.applyFilter(nodesWithPrivate),
+    [nodesWithPrivate, viewFilter],
+  );
+
+  setNodeCardContext({
+    onRename: (id, title) => repo.rename(id, title),
+    editingId,
+    setEditingId,
+    editingPeers,
+    onToggleCollapse: toggleCollapse,
+    onTogglePrivate: (id, value) => repo.setPrivate(id, value),
+    filterStatus,
+    shadow: { toggle: ai.toggle, edit: ai.edit },
+  });
+
   useEffect(() => {
-    const { rfNodes: ln, rfEdges: le } = layout(nodes, collapsed);
+    const { rfNodes: ln, rfEdges: le } = layout(nodesWithPrivate, collapsed);
     setRfNodes(ln.map((n) => ({ ...n, selected: n.id === selectedId })));
     setRfEdges(le);
-  }, [nodes, selectedId, collapsed, setRfNodes, setRfEdges]);
+  }, [nodesWithPrivate, selectedId, collapsed, setRfNodes, setRfEdges]);
 
   const onNodeDragStop: OnNodeDrag<Node<CardData>> = useCallback(
     (_e, dragged) => {
@@ -264,7 +287,7 @@ export function MapCanvas({
     setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
   };
 
-  const selectedNode = selectedId ? (nodes.find((n) => n.id === selectedId) ?? null) : null;
+  const selectedNode = selectedId ? (nodesWithPrivate.find((n) => n.id === selectedId) ?? null) : null;
   const selfName = user?.displayName ?? '我';
   const selfColor = user ? colorFor(user.id) : '#888';
 
@@ -381,6 +404,33 @@ export function MapCanvas({
             <Avatar key={p.clientId} name={p.user.name} color={p.user.color} title={p.user.name} />
           ))}
         </div>
+
+        {/* 视图过滤工具栏 */}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/90 backdrop-blur border border-slate-200 rounded-full px-3 py-1.5 shadow text-xs">
+          <button
+            title="只看我的节点"
+            onClick={viewFilter.toggleOnlyMe}
+            className={`px-2 py-0.5 rounded-full transition-colors ${
+              viewFilter.filter.onlyMe
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            只看我的
+          </button>
+          {viewFilter.isActive && (
+            <button
+              title="清除过滤"
+              onClick={viewFilter.reset}
+              className="px-2 py-0.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+            >
+              × 清除
+            </button>
+          )}
+          {!viewFilter.isActive && (
+            <span className="text-slate-300 select-none">过滤</span>
+          )}
+        </div>
         {ai.proposal && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-lg border border-slate-200 px-3 py-2 flex items-center gap-2 text-xs">
             <span className="text-slate-600">
@@ -438,6 +488,7 @@ export function MapCanvas({
           repo={repo}
           node={selectedNode}
           projectId={projectId}
+          myUserId={user?.id}
         />
       )}
 

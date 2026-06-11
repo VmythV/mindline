@@ -22,6 +22,7 @@ export const ID_PREFIX = {
   aiProposal: 'prop_',
   migration: 'mig_',
   job: 'job_',
+  comment: 'cm_',
 } as const;
 
 export type IdEntity = keyof typeof ID_PREFIX;

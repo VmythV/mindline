@@ -9,6 +9,8 @@ import { NodeTypesModule } from './node-types/node-types.module';
 import { ChangesModule } from './changes/changes.module';
 import { AiModule } from './ai/ai.module';
 import { MilestonesModule } from './milestones/milestones.module';
+import { CommentsModule } from './comments/comments.module';
+import { TransferModule } from './transfer/transfer.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { HealthController } from './health.controller';
@@ -24,6 +26,8 @@ import { HealthController } from './health.controller';
     ChangesModule,
     AiModule,
     MilestonesModule,
+    CommentsModule,
+    TransferModule,
   ],
   controllers: [HealthController],
   providers: [

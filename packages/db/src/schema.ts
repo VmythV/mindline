@@ -300,6 +300,70 @@ export const aiUsage = pgTable(
   ],
 );
 
+// ===================== 评论（M3） =====================
+
+export const comments = pgTable(
+  'comments',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    mapId: text('map_id')
+      .notNull()
+      .references(() => maps.id, { onDelete: 'cascade' }),
+    nodeId: text('node_id').notNull(), // 节点在 Yjs，无 FK
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    body: text('body').notNull(),
+    mentions: text('mentions').array(), // 被 @ 的 userId[]
+    resolved: boolean('resolved').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('ix_comments_node').on(t.nodeId, t.createdAt)],
+);
+
+// ===================== 人员替换任务（M3） =====================
+
+export const transferJobs = pgTable(
+  'transfer_jobs',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    fromUserId: text('from_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    toUserId: text('to_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    scope: text('scope').notNull(), // project | workspace | tenant
+    scopeId: text('scope_id'),
+    status: text('status').notNull().default('running'), // running | done | failed
+    processed: integer('processed').notNull().default(0),
+    total: integer('total').notNull().default(0),
+    conflicts: jsonb('conflicts'), // [{nodeId, reason}]
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('transfer_jobs_scope_ck', sql`${t.scope} in ('project','workspace','tenant')`),
+    check('transfer_jobs_status_ck', sql`${t.status} in ('running','done','failed')`),
+    // 同范围至多一个进行中任务
+    uniqueIndex('uq_transfer_running')
+      .on(t.tenantId, t.fromUserId, t.scope)
+      .where(sql`${t.status} = 'running'`),
+  ],
+);
+
 // ===================== 里程碑（M2.6） =====================
 
 export const milestones = pgTable(
@@ -341,4 +405,6 @@ export const schema = {
   aiProviderConfigs,
   aiUsage,
   milestones,
+  comments,
+  transferJobs,
 };

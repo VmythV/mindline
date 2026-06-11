@@ -297,6 +297,71 @@ export const aiUsage = sqliteTable(
   ],
 );
 
+// ===================== 评论（M3） =====================
+
+export const comments = sqliteTable(
+  'comments',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    mapId: text('map_id')
+      .notNull()
+      .references(() => maps.id, { onDelete: 'cascade' }),
+    nodeId: text('node_id').notNull(),
+    authorId: text('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    body: text('body').notNull(),
+    mentions: text('mentions', { mode: 'json' }).$type<string[] | null>(),
+    resolved: integer('resolved', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().defaultNow(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().defaultNow(),
+  },
+  (t) => [index('ix_comments_node').on(t.nodeId, t.createdAt)],
+);
+
+// ===================== 人员替换任务（M3） =====================
+
+export const transferJobs = sqliteTable(
+  'transfer_jobs',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    fromUserId: text('from_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    toUserId: text('to_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    scope: text('scope').notNull(),
+    scopeId: text('scope_id'),
+    status: text('status').notNull().default('running'),
+    processed: integer('processed').notNull().default(0),
+    total: integer('total').notNull().default(0),
+    conflicts: text('conflicts', { mode: 'json' }).$type<
+      Array<{ nodeId: string; reason: string }> | null
+    >(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('transfer_jobs_scope_ck', sql`${t.scope} in ('project','workspace','tenant')`),
+    check('transfer_jobs_status_ck', sql`${t.status} in ('running','done','failed')`),
+    uniqueIndex('uq_transfer_running')
+      .on(t.tenantId, t.fromUserId, t.scope)
+      .where(sql`${t.status} = 'running'`),
+  ],
+);
+
 // ===================== 里程碑 =====================
 
 export const milestones = sqliteTable(
@@ -338,4 +403,6 @@ export const sqliteSchema = {
   aiProviderConfigs,
   aiUsage,
   milestones,
+  comments,
+  transferJobs,
 };

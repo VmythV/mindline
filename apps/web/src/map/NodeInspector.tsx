@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiStream } from '../lib/api';
 import type { ChangeList, NodeTypeList } from '../lib/types';
 import type { MapRepository } from './MapRepository';
@@ -24,17 +24,32 @@ function fmtTime(ts: number): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-/** 节点详情侧栏：标题 + 按类型 Schema 动态渲染字段表单 + 变更历史。 */
+interface Comment {
+  id: string;
+  body: string;
+  authorId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  resolved: boolean;
+  createdAt: number;
+  mentions: string[] | null;
+}
+
+/** 节点详情侧栏：标题 + 按类型 Schema 动态渲染字段表单 + 软权限 + 评论 + 变更历史。 */
 export function NodeInspector({
   repo,
   node,
   projectId,
+  myUserId,
 }: {
   repo: MapRepository;
   node: NodeView;
   projectId: string;
+  myUserId?: string;
 }) {
+  const qc = useQueryClient();
   const [title, setTitle] = useState(node.title);
+  const [commentDraft, setCommentDraft] = useState('');
 
   const { data: types } = useQuery({
     queryKey: ['node-types', projectId],
@@ -48,6 +63,33 @@ export function NodeInspector({
     queryKey: ['node-history', repo.mapId, node.id],
     queryFn: () => api<ChangeList>(`/maps/${repo.mapId}/changes?node=${node.id}`),
     refetchInterval: 4000,
+  });
+
+  const { data: comments } = useQuery({
+    queryKey: ['comments', repo.mapId, node.id],
+    queryFn: () =>
+      api<{ items: Comment[] }>(`/maps/${repo.mapId}/nodes/${node.id}/comments`),
+    refetchInterval: 8000,
+  });
+
+  const addComment = useMutation({
+    mutationFn: (body: string) =>
+      api(`/maps/${repo.mapId}/nodes/${node.id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ body }),
+      }),
+    onSuccess: () => {
+      setCommentDraft('');
+      void qc.invalidateQueries({ queryKey: ['comments', repo.mapId, node.id] });
+    },
+  });
+
+  const resolveComment = useMutation({
+    mutationFn: ({ id, resolved }: { id: string; resolved: boolean }) =>
+      api(`/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['comments', repo.mapId, node.id] });
+    },
   });
 
   // AI 摘要（子树）：流式累积为可编辑初稿
@@ -76,6 +118,26 @@ export function NodeInspector({
           onChange={(e) => setTitle(e.target.value)}
           onBlur={() => repo.rename(node.id, title.trim() || '未命名')}
         />
+      </div>
+
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-slate-400">私有节点</label>
+        <button
+          title={node.private ? '取消私有（软权限）' : '标记为私有（软权限，前端隐藏内容）'}
+          onClick={() => {
+            if (!node.private) {
+              if (!confirm('标记为私有后，无权限的成员只能看到占位骨架，内容前端隐藏（软隔离）。确认？')) return;
+            }
+            repo.setPrivate(node.id, !node.private);
+          }}
+          className={`text-xs px-2 py-0.5 rounded border ${
+            node.private
+              ? 'bg-amber-50 border-amber-300 text-amber-700'
+              : 'bg-white border-slate-200 text-slate-500 hover:border-slate-400'
+          }`}
+        >
+          {node.private ? '🔒 私有' : '🔓 公开'}
+        </button>
       </div>
 
       <div>
@@ -149,6 +211,59 @@ export function NodeInspector({
             </button>
           </>
         )}
+      </div>
+
+      <div className="pt-2 border-t border-slate-100">
+        <label className="text-xs text-slate-400">评论</label>
+        <ul className="mt-1 space-y-2 max-h-48 overflow-auto">
+          {comments?.items.map((c) => (
+            <li
+              key={c.id}
+              className={`text-xs rounded p-2 border ${c.resolved ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white border-slate-200'}`}
+            >
+              <div className="flex items-center justify-between mb-0.5">
+                <span className="font-medium text-slate-700">{c.displayName}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400">{fmtTime(c.createdAt)}</span>
+                  {(myUserId === c.authorId || true) && (
+                    <button
+                      title={c.resolved ? '重新打开' : '标记已解决'}
+                      onClick={() => resolveComment.mutate({ id: c.id, resolved: !c.resolved })}
+                      className="text-[10px] text-slate-400 hover:text-green-600"
+                    >
+                      {c.resolved ? '↩' : '✓'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-slate-600 whitespace-pre-wrap">{c.body}</p>
+            </li>
+          ))}
+          {comments?.items.length === 0 && (
+            <li className="text-xs text-slate-400">暂无评论</li>
+          )}
+        </ul>
+        <div className="mt-2 flex gap-1">
+          <input
+            className="flex-1 px-2 py-1 rounded border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300"
+            placeholder="添加评论… (Enter 发送)"
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && commentDraft.trim()) {
+                e.preventDefault();
+                addComment.mutate(commentDraft.trim());
+              }
+            }}
+          />
+          <button
+            className="px-2 py-1 rounded bg-blue-600 text-white text-xs disabled:opacity-50"
+            disabled={!commentDraft.trim() || addComment.isPending}
+            onClick={() => addComment.mutate(commentDraft.trim())}
+          >
+            发送
+          </button>
+        </div>
       </div>
 
       <div>

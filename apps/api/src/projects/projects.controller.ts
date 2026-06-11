@@ -93,4 +93,11 @@ export class ProjectsController {
   removeMember(@Param('id') id: string, @Param('userId') userId: string) {
     return this.projects.removeMember(id, userId);
   }
+
+  @UseGuards(ProjectRoleGuard)
+  @MinRole('viewer')
+  @Get('projects/:id/permissions')
+  getPermissions(@ProjectRole() role: Role) {
+    return this.projects.getPermissions(role);
+  }
 }

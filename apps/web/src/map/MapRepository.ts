@@ -39,7 +39,7 @@ export class MapRepository {
     });
   }
 
-  private static readonly STRUCT_KEYS = new Set(['id', 'parentId', 'order', 'type', 'title']);
+  private static readonly STRUCT_KEYS = new Set(['id', 'parentId', 'order', 'type', 'title', 'private']);
 
   /** 通用 data 字段（不随类型切换判废）：富文本正文 desc、废弃登记表本身。 */
   private static readonly SYSTEM_DATA_KEYS = new Set(['desc', '_deprecatedFields']);
@@ -55,8 +55,29 @@ export class MapRepository {
       order: ym.get('order') as string,
       type: (ym.get('type') as string) ?? 'idea',
       title: (ym.get('title') as string) ?? '',
+      private: (ym.get('private') as boolean | undefined) ?? false,
       data,
     };
+  }
+
+  /** 切换节点私有状态（软权限 §3）。子节点通过 effectivePrivate 继承，无需逐一修改。 */
+  setPrivate(id: string, value: boolean): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const before = (node.get('private') as boolean | undefined) ?? false;
+    if (before === value) return;
+    this.doc.transact(() => node.set('private', value), this.origin);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setField',
+        field: 'private',
+        before,
+        after: value,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
   }
 
   list(): NodeView[] {

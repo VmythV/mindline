@@ -13,6 +13,8 @@ interface NodeCardContext {
   setEditingId: (id: string | null) => void;
   editingPeers: Map<string, PeerBadge[]>;
   onToggleCollapse?: (id: string) => void;
+  onTogglePrivate?: (id: string, value: boolean) => void;
+  filterStatus?: Map<string, 'normal' | 'path' | 'hidden'>;
   shadow?: {
     toggle: (tempId: string, accept: boolean) => void;
     edit: (tempId: string, title: string) => void;
@@ -73,6 +75,35 @@ function NodeCardImpl({ id, data, selected }: NodeProps) {
     );
   }
 
+  const filterStatus = ctx?.filterStatus?.get(id) ?? 'normal';
+  const isPrivate = node.effectivePrivate ?? node.private ?? false;
+
+  // 路径节点（过滤时的骨架占位）：半透明 + 仅标题
+  if (filterStatus === 'path') {
+    return (
+      <div className="relative px-3 py-2 rounded-lg border border-dashed border-slate-300 bg-slate-50/60 opacity-50 text-sm min-w-[120px] max-w-[220px]">
+        <Handle type="target" position={Position.Left} className="!bg-slate-300" />
+        <span className="block truncate text-slate-500 italic">{node.title || '未命名'}</span>
+        <Handle type="source" position={Position.Right} className="!bg-slate-300" />
+      </div>
+    );
+  }
+
+  // 私有节点骨架（软权限 §3.2）：结构可见，内容隐藏
+  if (isPrivate) {
+    return (
+      <div
+        className={`relative px-3 py-2 rounded-lg border bg-slate-100 shadow-sm text-sm min-w-[120px] max-w-[220px] ${
+          selected ? 'border-blue-400 ring-2 ring-blue-100' : 'border-slate-300'
+        }`}
+      >
+        <Handle type="target" position={Position.Left} className="!bg-slate-300" />
+        <span className="block truncate text-slate-400">🔒 受限节点</span>
+        <Handle type="source" position={Position.Right} className="!bg-slate-300" />
+      </div>
+    );
+  }
+
   const editing = ctx?.editingId === id;
   const peers = ctx?.editingPeers.get(id) ?? [];
   const [draft, setDraft] = useState(node.title);
@@ -114,6 +145,10 @@ function NodeCardImpl({ id, data, selected }: NodeProps) {
         />
       ) : (
         <span className="block truncate text-slate-800">{node.title || '未命名'}</span>
+      )}
+      {/* 私有标记徽标 */}
+      {(node.private) && (
+        <span className="absolute top-0.5 left-0.5 text-[9px] text-slate-400" title="此节点已标记为私有">🔒</span>
       )}
       <Handle type="source" position={Position.Right} className="!bg-slate-300" />
 

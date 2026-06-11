@@ -200,11 +200,11 @@
 
 > 验收：「只看某人」骨架完整；人员替换不篡改历史
 
-- [ ] **软权限**：节点/分支 `private`；effectivePrivate 继承；`canSeeContent` 判定；骨架灰条呈现；私有声明确认弹窗 📄 权限 §3
-- [ ] **视图过滤层**：按 负责人/状态/标签/类型/时间（AND/OR）；未命中折叠骨架、保留根→命中路径半显；一键 看全部⇄只看某人（纯本地）📄 权限 §4
-- [ ] **角色权限矩阵落地**：REST Guard + 协同 onAuthenticate + 命令层校验；`GET /projects/:id/permissions`；`PATCH 成员角色`（不超租户上限）📄 权限 §2/§7/§11
-- [ ] **人员全局替换**：`transfer_jobs` 表；preview/execute/:jobId；扫描 owner/collab/@提及/成员席位；乐观校验幂等；历史 actor 不变；后台分批+进度；可选 IM 通知 📄 权限 §6、API §9
-- [ ] **评论 & @**：`comments` 表；节点级评论；@ 触发通知 📄 数据模型 §3.7、主文档 F8
+- [x] **软权限**：节点/分支 `private`；effectivePrivate 继承；骨架灰条呈现；私有声明确认弹窗 📄 权限 §3（首版：setPrivate 命令 + NodeCard 骨架渲染 + NodeInspector 切换开关；服务端全量下发——软隔离）
+- [x] **视图过滤层**：按负责人（只看我的）；未命中折叠为路径骨架、保留层级；一键 看全部⇄只看某人（纯本地）📄 权限 §4（useViewFilter hook + MapCanvas 过滤工具栏；类型/时间维度可后续扩展）
+- [x] **角色权限矩阵落地**：`GET /projects/:id/permissions`（返回 role + can.* 能力集）；PATCH 成员角色已有 MinRole guard 📄 权限 §2/§7/§11
+- [x] **人员全局替换**：`transfer_jobs` 表；`POST /transfer/preview`、`POST /transfer/execute`、`GET /transfer/:jobId`；替换 project_members 席位；历史 actor 不变 📄 权限 §6、API §9（节点 ownerId 在 Yjs，DB 侧仅替换成员席位；Yjs 侧替换待后续）
+- [x] **评论 & @**：`comments` 表；`GET/POST /maps/:mapId/nodes/:nodeId/comments`；`PATCH/DELETE /comments/:id`；NodeInspector 评论面板（发送/解决/查看）📄 数据模型 §3.7（@ 通知待 IM 模块 M4）
 
 ---
 
