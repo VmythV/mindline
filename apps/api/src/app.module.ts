@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { DbModule } from './db/db.module';
+import { InfraModule } from './infra/infra.module';
 import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { NodeTypesModule } from './node-types/node-types.module';
@@ -16,6 +17,7 @@ import { HealthController } from './health.controller';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     DbModule,
+    InfraModule,
     AuthModule,
     ProjectsModule,
     NodeTypesModule,

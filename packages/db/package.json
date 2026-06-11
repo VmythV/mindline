@@ -13,7 +13,9 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
@@ -22,9 +24,12 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:push:dev": "drizzle-kit push --config ./drizzle.sqlite.config.ts",
+    "db:studio:dev": "drizzle-kit studio --config ./drizzle.sqlite.config.ts"
   },
   "dependencies": {
+    "@libsql/client": "^0.17.3",
     "drizzle-orm": "^0.38.3",
     "postgres": "^3.4.5"
   },

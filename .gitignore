@@ -19,6 +19,12 @@ coverage/
 .env.local
 .env.*.local
 
+# 本地开发存储（SQLite DB、对象存储）
+*.db
+*.db-wal
+*.db-shm
+.local-storage/
+
 # logs
 *.log
 npm-debug.log*

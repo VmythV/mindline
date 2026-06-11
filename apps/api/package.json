@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@mindline/db": "workspace:*",
+    "@mindline/infra": "workspace:*",
     "@mindline/shared": "workspace:*",
     "@nestjs/common": "^10.4.15",
     "@nestjs/config": "^3.3.0",

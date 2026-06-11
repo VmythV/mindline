@@ -1,0 +1,5 @@
+# SQLite 本地开发数据库（DB_DRIVER=sqlite 时生成）
+*.db
+*.db-wal
+*.db-shm
+drizzle-sqlite/
