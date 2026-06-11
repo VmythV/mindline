@@ -12,6 +12,9 @@ import { callGateway, callGatewayText } from './gateway';
 import { buildProposal } from './validate';
 import type { DecomposeDto } from './dto/decompose.dto';
 import type { SummarizeDto } from './dto/summarize.dto';
+import type { ConverseDto } from './dto/converse.dto';
+import type { CompleteDto } from './dto/complete.dto';
+import type { RewriteDto } from './dto/rewrite.dto';
 
 interface Ctx {
   userId: string;
@@ -220,5 +223,108 @@ export class AiService {
     } catch {
       /* 计量失败忽略 */
     }
+  }
+
+  /** 对话（SSE）：多轮对话询问节点子树上下文，输出 delta 文本流。 */
+  async converse(dto: ConverseDto, ctx: Ctx, projectId: string, emit: Emit, signal: AbortSignal) {
+    const snap = await this.changes.snapshot(dto.mapId, ctx);
+    const sub = this.collectSubtree(snap.nodes, dto.nodeId);
+    const system = `你是思谱 Mindline 的 AI 助手，当前上下文是一个思维导图子树。请结合以下上下文回答用户问题，回答简洁专业。\n\n# 当前子树（根：${sub.title}）\n${sub.text}`;
+
+    const resolved = await this.providers.getActiveConfig(ctx.tenantId);
+    const creds = resolved
+      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      : undefined;
+    const hasGateway = !!(creds?.url || process.env.AI_GATEWAY_URL);
+    const provider = hasGateway ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai' : 'stub';
+    const model = hasGateway ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini' : 'stub';
+    emit('meta', { provider, model });
+
+    const lastUser = dto.messages.at(-1)?.content ?? '请分析这个子树';
+    const historyText = dto.messages
+      .slice(0, -1)
+      .map((m) => `${m.role === 'user' ? '用户' : '助手'}：${m.content}`)
+      .join('\n');
+    const user = historyText ? `${historyText}\n\n用户：${lastUser}` : lastUser;
+
+    const stubText = `（示例回复）关于「${sub.title}」子树，共有 ${Math.max(sub.count - 1, 0)} 个子节点。配置 AI 网关后可获得真实的对话回复。`;
+    const result = await callGatewayText({ system, user, signal, stubText, creds });
+
+    for (const chunk of splitForStream(result.text)) emit('delta', { text: chunk });
+    emit('done', { tokens: result.modelMeta.tokens });
+
+    try {
+      await this.providers.record({
+        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
+        capability: 'converse', provider: result.modelMeta.provider,
+        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+      });
+    } catch { /* 计量失败忽略 */ }
+  }
+
+  /** 补全查重（SSE）：检测 title 与同级节点的相似度，输出分析文本。 */
+  async complete(dto: CompleteDto, ctx: Ctx, projectId: string, emit: Emit, signal: AbortSignal) {
+    const snap = await this.changes.snapshot(dto.mapId, ctx);
+    const target = snap.nodes.find((n) => n.id === dto.nodeId);
+    const siblings = snap.nodes.filter(
+      (n) => n.parentId === (target?.parentId ?? null) && n.id !== dto.nodeId,
+    );
+    const siblingTitles = siblings.map((s) => `- ${s.title}`).join('\n') || '（无兄弟节点）';
+
+    const system = `你是查重助手。判断新节点标题与已有兄弟节点是否重复或高度相似，简洁输出结论和建议（中文）。`;
+    const user = `# 新标题\n${dto.title}\n\n# 已有兄弟节点\n${siblingTitles}`;
+
+    const resolved = await this.providers.getActiveConfig(ctx.tenantId);
+    const creds = resolved
+      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      : undefined;
+    const provider = creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai';
+    const model = creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini';
+    emit('meta', { provider, model });
+
+    const stubText = `（示例）标题「${dto.title}」与已有节点暂无明显重复，可安全使用。`;
+    const result = await callGatewayText({ system, user, signal, stubText, creds });
+
+    for (const chunk of splitForStream(result.text)) emit('delta', { text: chunk });
+    emit('done', { tokens: result.modelMeta.tokens });
+
+    try {
+      await this.providers.record({
+        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
+        capability: 'complete', provider: result.modelMeta.provider,
+        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+      });
+    } catch { /* 计量失败忽略 */ }
+  }
+
+  /** 改写（SSE）：按 prompt 改写节点标题，输出改写结果文本流。 */
+  async rewrite(dto: RewriteDto, ctx: Ctx, projectId: string, emit: Emit, signal: AbortSignal) {
+    const snap = await this.changes.snapshot(dto.mapId, ctx);
+    const target = snap.nodes.find((n) => n.id === dto.nodeId);
+
+    const system = `你是改写助手。按用户要求改写思维导图节点标题，直接输出改写后的标题，不加多余解释。`;
+    const user = `# 原标题\n${target?.title ?? '（未知）'}\n\n# 改写要求\n${dto.prompt}`;
+
+    const resolved = await this.providers.getActiveConfig(ctx.tenantId);
+    const creds = resolved
+      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      : undefined;
+    const provider = creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai';
+    const model = creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini';
+    emit('meta', { provider, model });
+
+    const stubText = `${target?.title ?? dto.prompt}（改写版）`;
+    const result = await callGatewayText({ system, user, signal, stubText, creds });
+
+    for (const chunk of splitForStream(result.text)) emit('delta', { text: chunk });
+    emit('done', { tokens: result.modelMeta.tokens });
+
+    try {
+      await this.providers.record({
+        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
+        capability: 'rewrite', provider: result.modelMeta.provider,
+        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+      });
+    } catch { /* 计量失败忽略 */ }
   }
 }

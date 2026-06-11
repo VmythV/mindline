@@ -362,6 +362,66 @@ export const transferJobs = sqliteTable(
   ],
 );
 
+// ===================== Schema 迁移任务（M4） =====================
+
+export const schemaMigrations = sqliteTable(
+  'schema_migrations',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    typeKey: text('type_key').notNull(),
+    fromVersion: integer('from_version').notNull(),
+    toVersion: integer('to_version').notNull(),
+    filter: text('filter', { mode: 'json' }),
+    ops: text('ops', { mode: 'json' }).notNull(),
+    scopeProjectIds: text('scope_project_ids', { mode: 'json' }).$type<string[] | null>(),
+    status: text('status').notNull().default('running'),
+    processed: integer('processed').notNull().default(0),
+    total: integer('total').notNull().default(0),
+    result: text('result', { mode: 'json' }),
+    rollbackableUntil: integer('rollbackable_until', { mode: 'timestamp' }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'schema_migrations_status_ck',
+      sql`${t.status} in ('running','done','failed','rolledback')`,
+    ),
+  ],
+);
+
+// ===================== IM 渠道（M4） =====================
+
+export const imChannels = sqliteTable(
+  'im_channels',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: text('type').notNull(),
+    config: text('config', { mode: 'json' }).notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('im_channels_type_ck', sql`${t.type} in ('wecom','dingtalk','feishu','slack','webhook')`),
+    index('ix_im_channels_project').on(t.projectId),
+  ],
+);
+
 // ===================== 里程碑 =====================
 
 export const milestones = sqliteTable(
@@ -405,4 +465,6 @@ export const sqliteSchema = {
   milestones,
   comments,
   transferJobs,
+  schemaMigrations,
+  imChannels,
 };

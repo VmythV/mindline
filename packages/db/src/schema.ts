@@ -364,6 +364,66 @@ export const transferJobs = pgTable(
   ],
 );
 
+// ===================== Schema 迁移任务（M4） =====================
+
+export const schemaMigrations = pgTable(
+  'schema_migrations',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    typeKey: text('type_key').notNull(),
+    fromVersion: integer('from_version').notNull(),
+    toVersion: integer('to_version').notNull(),
+    filter: jsonb('filter'),
+    ops: jsonb('ops').notNull(),
+    scopeProjectIds: text('scope_project_ids').array(),
+    status: text('status').notNull().default('running'), // running | done | failed | rolledback
+    processed: integer('processed').notNull().default(0),
+    total: integer('total').notNull().default(0),
+    result: jsonb('result'), // {ok, skipped, issues}
+    rollbackableUntil: timestamp('rollbackable_until', { withTimezone: true }),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check(
+      'schema_migrations_status_ck',
+      sql`${t.status} in ('running','done','failed','rolledback')`,
+    ),
+  ],
+);
+
+// ===================== IM 渠道（M4） =====================
+
+export const imChannels = pgTable(
+  'im_channels',
+  {
+    id: text('id').primaryKey(),
+    tenantId: text('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    type: text('type').notNull(), // wecom | dingtalk | feishu | slack | webhook
+    config: jsonb('config').notNull(), // 加密存储 {webhookUrlEnc, ...}
+    enabled: boolean('enabled').notNull().default(true),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check('im_channels_type_ck', sql`${t.type} in ('wecom','dingtalk','feishu','slack','webhook')`),
+    index('ix_im_channels_project').on(t.projectId),
+  ],
+);
+
 // ===================== 里程碑（M2.6） =====================
 
 export const milestones = pgTable(
@@ -407,4 +467,6 @@ export const schema = {
   milestones,
   comments,
   transferJobs,
+  schemaMigrations,
+  imChannels,
 };

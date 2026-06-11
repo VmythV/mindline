@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { IsArray, IsString } from 'class-validator';
 import { CurrentUser, type AuthUser } from '../common/decorators/current-user.decorator';
 import { ChangesService } from './changes.service';
 import { AppendChangesDto } from './dto/append-changes.dto';
+
+class ResolveNodeRefsDto {
+  @IsArray() @IsString({ each: true }) ids!: string[];
+}
 
 @Controller()
 export class ChangesController {
@@ -44,6 +49,11 @@ export class ChangesController {
   @Get('maps/:mapId/snapshot')
   snapshot(@Param('mapId') mapId: string, @CurrentUser() user: AuthUser) {
     return this.svc.snapshot(mapId, user);
+  }
+
+  @Post('nodes/resolve')
+  resolveNodeRefs(@Body() dto: ResolveNodeRefsDto, @CurrentUser() user: AuthUser) {
+    return this.svc.resolveNodeRefs(dto.ids, user);
   }
 
   @Get('nodes/:nodeId/history')

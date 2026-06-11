@@ -11,6 +11,8 @@ import { AiModule } from './ai/ai.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { CommentsModule } from './comments/comments.module';
 import { TransferModule } from './transfer/transfer.module';
+import { SchemaMigrationsModule } from './schema-migrations/schema-migrations.module';
+import { ImModule } from './im/im.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { HealthController } from './health.controller';
@@ -28,6 +30,8 @@ import { HealthController } from './health.controller';
     MilestonesModule,
     CommentsModule,
     TransferModule,
+    SchemaMigrationsModule,
+    ImModule,
   ],
   controllers: [HealthController],
   providers: [

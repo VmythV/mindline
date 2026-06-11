@@ -212,10 +212,10 @@
 
 > 验收：手动发布送达 IM；子项目可下钻；Schema 变更可批量迁移并回滚
 
-- [ ] **IM 渠道与手动发布**：`im_channels` 表；GET/POST/DELETE 渠道（config 加密）；`POST /im/publish`（node/milestone/summary 卡片）；适配 企微/钉钉/飞书/Slack/Webhook 📄 API §10、数据模型 §3.10
-- [ ] **父子项目 & 跨项目引用**：项目树；节点下钻子项目（独立 MindMap，A7）；跨项目镜像引用（跳转不复制）📄 主文档 F9
-- [ ] **AI 对话式 converse / 补全查重 complete / 改写 rewrite**（SSE，输出统一提案）📄 API §7、AI §1
-- [ ] **Schema 迁移工具**：`schema_migrations` 表；DSL + 5 算子(renameField/setDefault/convertType/mapEnum/dropField)；preview/execute/:id/rollback；乐观校验；事件逆放回滚（默认7天，租户可配1–30天）；跨项目逐项目授权 📄 Schema迁移全篇、API §5
+- [x] **IM 渠道与手动发布**：`im_channels` 表；GET/POST/DELETE 渠道（config 加密）；`POST /im/publish`（node/milestone/summary 卡片）；适配 企微/钉钉/飞书/Slack/Webhook 📄 API §10、数据模型 §3.10
+- [x] **父子项目 & 跨项目引用**：项目树（ProjectsPage 树形展开/折叠 + 子项目新建）；跨项目镜像引用（NodeLinksPanel + addLink/removeLink + POST /nodes/resolve 标题回显）📄 主文档 F9
+- [x] **AI 对话式 converse / 补全查重 complete / 改写 rewrite**（SSE，输出统一提案）📄 API §7、AI §1
+- [x] **Schema 迁移工具**：`schema_migrations` 表；DSL + 5 算子(renameField/setDefault/convertType/mapEnum/dropField)；preview/execute/:id/rollback；乐观校验；事件逆放回滚（默认7天，租户可配1–30天）；跨项目逐项目授权 📄 Schema迁移全篇、API §5
 
 ---
 

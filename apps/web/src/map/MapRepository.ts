@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import { generateKeyBetween } from 'fractional-indexing';
-import { newId, type ChangeOp, type Proposal } from '@mindline/shared';
+import { newId, type ChangeOp, type Proposal, type NodeLink } from '@mindline/shared';
 import type { NodeView } from './types';
 
 export interface EmitEvent {
@@ -74,6 +74,48 @@ export class MapRepository {
         field: 'private',
         before,
         after: value,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
+  }
+
+  /** 添加跨项目节点/子项目引用链接。 */
+  addLink(id: string, link: NodeLink): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const prev = (node.get('links') as NodeLink[] | undefined) ?? [];
+    if (prev.some((l) => l.targetId === link.targetId && l.kind === link.kind)) return;
+    const next = [...prev, link];
+    this.doc.transact(() => node.set('links', next), this.origin);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setField',
+        field: 'links',
+        before: prev,
+        after: next,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
+  }
+
+  /** 移除跨项目引用链接（按 targetId + kind 匹配）。 */
+  removeLink(id: string, targetId: string, kind: NodeLink['kind']): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const prev = (node.get('links') as NodeLink[] | undefined) ?? [];
+    const next = prev.filter((l) => !(l.targetId === targetId && l.kind === kind));
+    if (next.length === prev.length) return;
+    this.doc.transact(() => node.set('links', next), this.origin);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setField',
+        field: 'links',
+        before: prev,
+        after: next,
         pathIds: this.getAncestorIds(id),
         ts: Date.now(),
       },

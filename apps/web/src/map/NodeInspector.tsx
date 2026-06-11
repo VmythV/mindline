@@ -5,6 +5,7 @@ import type { ChangeList, NodeTypeList } from '../lib/types';
 import type { MapRepository } from './MapRepository';
 import type { NodeView } from './types';
 import { DynamicField } from './DynamicField';
+import type { NodeLink } from '@mindline/shared';
 
 const OP_LABEL: Record<string, string> = {
   create: '创建',
@@ -33,6 +34,111 @@ interface Comment {
   resolved: boolean;
   createdAt: number;
   mentions: string[] | null;
+}
+
+interface NodeRefInfo {
+  nodeId: string;
+  title: string;
+  mapId: string;
+  projectName: string;
+}
+
+/** 跨项目引用面板：展示 links 列表，支持添加/移除。 */
+function NodeLinksPanel({ repo, node }: { repo: MapRepository; node: NodeView }) {
+  const links = (node.data.links as NodeLink[] | undefined) ?? [];
+  const [addOpen, setAddOpen] = useState(false);
+  const [inputId, setInputId] = useState('');
+  const [kind, setKind] = useState<NodeLink['kind']>('reference');
+
+  const { data: resolved } = useQuery<NodeRefInfo[]>({
+    queryKey: ['node-refs', links.map((l) => l.targetId).join(',')],
+    queryFn: () =>
+      api('/nodes/resolve', {
+        method: 'POST',
+        body: JSON.stringify({ ids: links.map((l) => l.targetId) }),
+      }),
+    enabled: links.length > 0,
+  });
+
+  const refMap = new Map<string, NodeRefInfo>(resolved?.map((r) => [r.nodeId, r]));
+
+  return (
+    <div className="pt-2 border-t border-slate-100">
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-xs text-slate-400">跨项目引用</label>
+        <button
+          className="text-xs text-blue-500 hover:text-blue-700"
+          onClick={() => setAddOpen((v) => !v)}
+        >
+          {addOpen ? '取消' : '+ 添加'}
+        </button>
+      </div>
+
+      {addOpen && (
+        <div className="flex items-center gap-1 mb-2">
+          <select
+            className="px-1 py-0.5 text-xs rounded border border-slate-200"
+            value={kind}
+            onChange={(e) => setKind(e.target.value as NodeLink['kind'])}
+          >
+            <option value="reference">引用节点</option>
+            <option value="subproject">子项目</option>
+          </select>
+          <input
+            className="flex-1 px-2 py-0.5 text-xs rounded border border-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-300"
+            placeholder="节点 ID 或项目 ID"
+            value={inputId}
+            onChange={(e) => setInputId(e.target.value.trim())}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && inputId) {
+                repo.addLink(node.id, { kind, targetId: inputId });
+                setInputId('');
+                setAddOpen(false);
+              }
+            }}
+          />
+          <button
+            className="px-2 py-0.5 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            disabled={!inputId}
+            onClick={() => {
+              repo.addLink(node.id, { kind, targetId: inputId });
+              setInputId('');
+              setAddOpen(false);
+            }}
+          >
+            确认
+          </button>
+        </div>
+      )}
+
+      {links.length === 0 && !addOpen && (
+        <p className="text-xs text-slate-400">暂无引用</p>
+      )}
+
+      <ul className="space-y-1">
+        {links.map((l) => {
+          const info = refMap.get(l.targetId);
+          return (
+            <li
+              key={`${l.kind}-${l.targetId}`}
+              className="flex items-center gap-1 text-xs"
+            >
+              <span className="shrink-0 text-slate-400">{l.kind === 'subproject' ? '📁' : '🔗'}</span>
+              <span className="flex-1 text-blue-600 truncate" title={l.targetId}>
+                {info ? `${info.projectName} / ${info.title}` : l.targetId}
+              </span>
+              <button
+                className="text-slate-300 hover:text-red-500 shrink-0"
+                onClick={() => repo.removeLink(node.id, l.targetId, l.kind)}
+              >
+                ×
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 /** 节点详情侧栏：标题 + 按类型 Schema 动态渲染字段表单 + 软权限 + 评论 + 变更历史。 */
@@ -212,6 +318,8 @@ export function NodeInspector({
           </>
         )}
       </div>
+
+      <NodeLinksPanel repo={repo} node={node} />
 
       <div className="pt-2 border-t border-slate-100">
         <label className="text-xs text-slate-400">评论</label>

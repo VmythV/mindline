@@ -204,6 +204,83 @@ export class ChangesService {
     return { nodeId, items: res.items, nextCursor: res.nextCursor };
   }
 
+  /**
+   * 批量解析跨项目节点引用：根据 nodeId 列表查找节点标题、所属 mapId、项目名称。
+   * 节点存储在 Yjs 快照里，需要逐 map 解码——对引用数量有合理上限（每次最多 50 个）。
+   */
+  async resolveNodeRefs(nodeIds: string[], ctx: Ctx) {
+    if (nodeIds.length === 0) return [];
+    const limited = nodeIds.slice(0, 50);
+
+    // 找到这些节点出现过的 change_events（可能在多个 map 里）
+    const events = await this.db
+      .select({ nodeId: schema.changeEvents.nodeId, mapId: schema.changeEvents.mapId })
+      .from(schema.changeEvents)
+      .where(
+        and(
+          eq(schema.changeEvents.tenantId, ctx.tenantId),
+          sql`${schema.changeEvents.nodeId} IN ${limited}`,
+        ),
+      )
+      .groupBy(schema.changeEvents.nodeId, schema.changeEvents.mapId)
+      .limit(100);
+
+    // mapId → nodeId 集合
+    const mapToNodes = new Map<string, Set<string>>();
+    for (const e of events) {
+      const s = mapToNodes.get(e.mapId) ?? new Set();
+      s.add(e.nodeId);
+      mapToNodes.set(e.mapId, s);
+    }
+
+    // 加载各 map 快照，提取目标节点
+    const result: {
+      nodeId: string;
+      title: string;
+      mapId: string;
+      projectName: string;
+    }[] = [];
+
+    for (const [mapId, wantedIds] of mapToNodes) {
+      // 检查调用方是否有该 map 访问权
+      try {
+        const { projectId } = await this.resolveMapAccess(mapId, ctx);
+        const projectRows = await this.db
+          .select({ name: schema.projects.name })
+          .from(schema.projects)
+          .where(eq(schema.projects.id, projectId))
+          .limit(1);
+        const projectName = projectRows[0]?.name ?? '';
+
+        const snaps = await this.db
+          .select({ state: schema.yjsSnapshots.state })
+          .from(schema.yjsSnapshots)
+          .where(eq(schema.yjsSnapshots.mapId, mapId))
+          .orderBy(desc(schema.yjsSnapshots.version))
+          .limit(1);
+        if (!snaps[0]) continue;
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, new Uint8Array(snaps[0].state));
+        const raw = doc.getMap('nodes').toJSON() as Record<string, Record<string, unknown>>;
+        doc.destroy();
+        for (const nid of wantedIds) {
+          const n = raw[nid];
+          if (!n) continue;
+          result.push({
+            nodeId: nid,
+            title: (n['title'] as string | undefined) ?? '',
+            mapId,
+            projectName,
+          });
+        }
+      } catch {
+        // 无权访问该 map，跳过
+      }
+    }
+
+    return result;
+  }
+
   /** 只读快照：解码该 map 最近落库的 Yjs 全量快照为扁平节点 JSON（导出/3D/搜索/AI 上下文用）。 */
   async snapshot(mapId: string, ctx: Ctx) {
     await this.resolveMapAccess(mapId, ctx); // 成员即可（Viewer+）
