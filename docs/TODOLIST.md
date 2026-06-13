@@ -73,13 +73,13 @@
 
 ### M0.1 数据层
 - [x] 执行核心 DDL（按依赖顺序）：tenants/users/workspaces/projects/maps/project_members/node_type_schemas(+versions)/yjs_updates/yjs_snapshots/change_events 📄 数据模型 §3、§5
-- [ ] 多租户隔离：应用层强制 `tenant_id` scope（中间件/ORM 全局 scope）+ 可选 RLS 📄 数据模型 §6
+- [x] 多租户隔离：应用层强制 `tenant_id` scope（✅ ALS 租户上下文中间件 + `getTenantId()` 权威来源 + 成员/时间轴/AI 建议查询纵深补 scope；可选 PG RLS 后续）📄 数据模型 §6
 
 ### M0.2 认证与租户
 - [x] `POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`GET /me` 📄 API §3
 - [x] JWT 含 sub/tenantId/type(access·refresh)/exp；刷新令牌机制（bcryptjs 哈希；users 加 password_hash）
 - [x] 全局 JwtGuard + `@Public()`；统一错误体过滤器；ValidationPipe；tenantId 从 JWT 注入（不接受 body 覆盖） 📄 API §1.2
-- [ ] 租户上下文中间件 + 应用层 `tenant_id` scope 强制（M0.3 起逐查询落实）
+- [x] 租户上下文中间件 + 应用层 `tenant_id` scope 强制（✅ `TenantContextMiddleware` 经 AsyncLocalStorage 建立请求级上下文，`JwtAuthGuard` 写入，业务查询经 `getTenantId()` 取权威 tenantId；漏 scope 即抛错而非裸查）
 
 ### M0.3 项目与成员
 - [x] 项目 CRUD `/projects`（含 parentId 父子嵌套）📄 API §4

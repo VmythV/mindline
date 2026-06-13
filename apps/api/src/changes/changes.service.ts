@@ -123,7 +123,8 @@ export class ChangesService {
   async list(mapId: string, ctx: Ctx, opts: ListOpts = {}) {
     await this.resolveMapAccess(mapId, ctx); // 成员即可（Viewer+）
     const ce = schema.changeEvents;
-    const conds = [eq(ce.mapId, mapId)];
+    // resolveMapAccess 已校验 map 属租户；此处显式带 tenantId 作纵深 scope
+    const conds = [eq(ce.mapId, mapId), eq(ce.tenantId, ctx.tenantId)];
     if (opts.nodeId) conds.push(eq(ce.nodeId, opts.nodeId));
     if (opts.actor) conds.push(eq(ce.actorId, opts.actor));
     if (opts.op) conds.push(eq(ce.op, opts.op));

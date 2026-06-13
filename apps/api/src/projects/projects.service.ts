@@ -8,6 +8,7 @@ import {
 import { and, count, eq, isNull } from 'drizzle-orm';
 import { newId, type Role } from '@mindline/shared';
 import { DRIZZLE } from '../db/db.module';
+import { getTenantId } from '../common/tenant-context';
 import { schema, type Database } from '@mindline/db';
 import { hasMinRole } from '../common/roles';
 import type { CreateProjectDto } from './dto/create-project.dto';
@@ -130,7 +131,23 @@ export class ProjectsService {
       .where(and(eq(schema.projects.id, id), eq(schema.projects.tenantId, tenantId)));
   }
 
+  /**
+   * 纵深校验：project 须属当前租户，否则 404。
+   * project_members 表无 tenant_id 列（约定⑤），其租户归属经 projects 反查；
+   * tenantId 取自 ALS 租户上下文，无需各成员方法逐层透传。
+   */
+  private async assertProjectInTenant(projectId: string): Promise<void> {
+    const tenantId = getTenantId();
+    const p = await this.db
+      .select({ id: schema.projects.id })
+      .from(schema.projects)
+      .where(and(eq(schema.projects.id, projectId), eq(schema.projects.tenantId, tenantId)))
+      .limit(1);
+    if (p.length === 0) throw new NotFoundException('项目不存在');
+  }
+
   async listMembers(projectId: string) {
+    await this.assertProjectInTenant(projectId);
     const rows = await this.db
       .select({
         userId: schema.projectMembers.userId,
@@ -146,6 +163,7 @@ export class ProjectsService {
   }
 
   async addMember(projectId: string, tenantId: string, dto: AddMemberDto) {
+    await this.assertProjectInTenant(projectId);
     const target = await this.db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -172,6 +190,7 @@ export class ProjectsService {
   }
 
   async updateMember(projectId: string, userId: string, role: Role) {
+    await this.assertProjectInTenant(projectId);
     const r = await this.db
       .update(schema.projectMembers)
       .set({ role })
@@ -187,6 +206,7 @@ export class ProjectsService {
   }
 
   async removeMember(projectId: string, userId: string) {
+    await this.assertProjectInTenant(projectId);
     await this.db
       .delete(schema.projectMembers)
       .where(

@@ -124,6 +124,7 @@ export class MilestonesService {
       .where(
         and(
           eq(schema.changeEvents.projectId, projectId),
+          eq(schema.changeEvents.tenantId, ctx.tenantId),
           gte(schema.changeEvents.ts, from),
           lte(schema.changeEvents.ts, to),
         ),

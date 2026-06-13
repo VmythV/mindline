@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { TenantContextMiddleware } from './common/middleware/tenant-context.middleware';
 import { DbModule } from './db/db.module';
 import { InfraModule } from './infra/infra.module';
 import { AuthModule } from './auth/auth.module';
@@ -39,4 +40,9 @@ import { HealthController } from './health.controller';
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // 全局挂载租户上下文中间件：早于守卫，为每个请求建立 ALS 上下文
+    consumer.apply(TenantContextMiddleware).forRoutes('*');
+  }
+}

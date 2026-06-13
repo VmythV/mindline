@@ -482,7 +482,7 @@ CREATE TABLE im_subscriptions (
 
 ## 6. 多租户隔离（应用层 + 可选 RLS）
 
-- **应用层**：所有查询强制注入 `tenant_id = current_tenant`（ORM 全局 scope / 中间件）。
+- **应用层（已落地）**：`TenantContextMiddleware`（`apps/api/src/common/middleware/`）经 AsyncLocalStorage 为每个请求建立租户上下文，`JwtAuthGuard` 鉴权后写入 `tenantId`；业务查询经 `getTenantId()`（`apps/api/src/common/tenant-context.ts`）取权威 `tenantId` 注入 `where`，未建立上下文/未鉴权即抛错而非裸查。入口处 `ProjectRoleGuard` 与 `ChangesService.resolveMapAccess` 已校验 project/map 的租户归属；无 tenant 列的关联表（`project_members` / `yjs_*`）经 `projects`/`maps` 反查间接隔离。
 - **可选 Row Level Security**（强隔离/合规场景）：
 
 ```sql
