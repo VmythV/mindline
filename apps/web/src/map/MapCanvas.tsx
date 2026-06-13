@@ -476,6 +476,8 @@ export function MapCanvas({
           onNodeDragStop={onNodeDragStop}
           onPaneClick={() => setSelectedId(null)}
           fitView
+          // M0.7 视口虚拟化：仅挂载视口内 + 缓冲区的节点 DOM，大图（1000 节点）维持 ≥30FPS
+          onlyRenderVisibleElements
           proOptions={{ hideAttribution: true }}
         >
           <Background />

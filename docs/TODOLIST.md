@@ -110,7 +110,7 @@
 
 ### M0.7 2D 树编辑（web · React Flow）
 - [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
-- [ ] 视口虚拟化（仅渲染可视区 + 缓冲区）
+- [x] 视口虚拟化（✅ React Flow v12 `onlyRenderVisibleElements`：仅挂载视口内+缓冲区节点 DOM；typecheck/lint 通过，1000 节点 FPS 待你在浏览器验收）
 - [x] 快捷键：Tab/Enter/Delete/方向键导航/Cmd+.（折叠子树）/F2/Space/Cmd+Z 📄 主文档 附录B（注：Shift+Enter 属节点内换行，归富文本编辑器）
 - [x] 拖拽改父（就近改父，禁止移入自身子树；改排序待细化）
 - [x] 轻富文本节点正文（Tiptap，节点详情侧栏 B/I/列表/代码块；字符级协同 y-prosemirror 后续）📄 主文档 A3
