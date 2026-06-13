@@ -183,7 +183,7 @@
 - [x] 虚影节点渲染（半透明虚线 + ✓/✗ 角标）；单个/全部 接受·拒绝·就地编辑标题 📄 AI §7
 - [x] 确认 → 命令层 ApplyProposal（同 batchId）→ Yjs 写入 + `aiGenerate` 事件
 - [x] **未确认不进 Y.Doc、不参与协同同步**（本地 UI 态）
-- [ ] `POST /ai/proposals/:proposalId/apply`（审计/服务端编排；最小闭环用前端本地应用）📄 API §7
+- [x] ~~`POST /ai/proposals/:proposalId/apply`~~ **不做（与约定②+API契约 §7.1 冲突）**：提案应用由前端命令层完成（写 Y.Doc + `aiGenerate` 事件落 `change_events` 即审计）；服务端写不了协同文档、且提案不落库（无 `proposals` 表）无法按 id 重建 ops。已对齐 AI拆解详设 §7。📄 API §7
 
 ### M2.5 摘要 summarize（SSE）
 - [x] `POST /ai/summarize`（scope=nodeId 子树；分块 delta；NodeInspector 可编辑初稿→填入正文）；range 时间区间后续 📄 API §7

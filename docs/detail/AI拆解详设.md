@@ -315,14 +315,13 @@ event: error  data: {"code":"MODEL_TIMEOUT","message":"...","retryable":true}
 ```
 错误码：400 参数/Schema 校验失败 · 403 权限 · 404 节点不存在 · 429 额度超限 · 502 模型网关失败 · 504 超时。
 
-### POST /api/ai/proposals/:proposalId/apply
-接受勾选 ops 落入文档（用于服务端编排/审计场景；前端也可直接走命令层本地应用 + 异步落库）。
-```jsonc
-// 请求
-{ "acceptTempIds": ["t1","t2"], "edits": { "t1": { "title": "接口设计(改)" } } }
-// 响应 200
-{ "batchId": "b_x", "createdNodeIds": ["n_77","n_78"] }
-```
+### ~~POST /api/ai/proposals/:proposalId/apply~~（不提供，与 API契约 §7.1 对齐）
+**不提供该服务端端点。** 提案的应用由**前端命令层**完成（`MapRepository.applyProposal` → Y.Doc，同 batchId 产出 `aiGenerate` 事件 → 落 `change_events`）。原因：
+- 约定②：命令层是 Y.Doc 唯一写入口，且 Y.Doc 活在 collab+前端进程，api 服务端无法直接写协同文档（返回 `createdNodeIds` 需服务端把节点落进文档，做不到）。
+- 提案为前端本地态（`decompose` 经 SSE 流式吐出、不落库，无 `proposals` 表），服务端无法按 `proposalId` 重建 ops。
+- 审计已覆盖：命令层 apply 产出的 `aiGenerate` 事件即审计流。
+
+> 若未来需要「服务端编排」（如批量自动应用），须先持久化提案（新建 `ai_proposals` 表）并让 api 作为 Yjs 客户端连 collab 应用命令层——属架构级扩展，非 MVP。
 
 ### POST /api/ai/summarize  (SSE)
 ```jsonc
