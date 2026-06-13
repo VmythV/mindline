@@ -12,14 +12,17 @@
     "e2e": "node scripts/e2e.mjs"
   },
   "dependencies": {
+    "@hocuspocus/extension-redis": "^2.15.3",
     "@hocuspocus/server": "^2.15.2",
     "@mindline/db": "workspace:*",
     "drizzle-orm": "^0.38.3",
+    "ioredis": "^4.31.0",
     "jsonwebtoken": "^9.0.2",
     "yjs": "^13.6.20"
   },
   "devDependencies": {
     "@hocuspocus/provider": "^2.15.2",
+    "@types/ioredis": "^4.28.10",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",

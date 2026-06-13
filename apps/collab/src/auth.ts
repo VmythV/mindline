@@ -18,14 +18,24 @@ export function verifyAccessToken(token: string): { userId: string; tenantId: st
 }
 
 /**
+ * 用户对某 map 的访问判定结果，供连接级 WS 关闭码映射（详设 §7 line 238）。
+ * - `not_found`：map 不存在，或跨租户（对该用户不可见，不泄露其他租户的存在性）→ 4404
+ * - `forbidden`：map 可见但非项目成员 → 4403
+ */
+export type MapRoleResult =
+  | { kind: 'ok'; role: string }
+  | { kind: 'not_found' }
+  | { kind: 'forbidden' };
+
+/**
  * 解析用户在某 map 的角色（map → project → project_members）。
- * map 不存在 / 跨租户 / 非成员 → 返回 null。
+ * 跨租户与不存在一律按「不可见」(not_found) 处理，与 api 的 resolveMapAccess 隔离语义一致。
  */
 export async function resolveMapRole(
   mapId: string,
   userId: string,
   tenantId: string,
-): Promise<string | null> {
+): Promise<MapRoleResult> {
   const rows = await db
     .select({
       mapTenant: schema.maps.tenantId,
@@ -43,6 +53,7 @@ export async function resolveMapRole(
     .where(eq(schema.maps.id, mapId))
     .limit(1);
   const row = rows[0];
-  if (!row || row.mapTenant !== tenantId) return null;
-  return row.role ?? null;
+  if (!row || row.mapTenant !== tenantId) return { kind: 'not_found' };
+  if (!row.role) return { kind: 'forbidden' };
+  return { kind: 'ok', role: row.role };
 }

@@ -98,7 +98,7 @@
 - [x] `onAuthenticate`：JWT + 项目成员资格 + map 读/写权（e2e 验证）📄 Yjs §7
 - [x] `onLoadDocument`：最近快照重建（增量 update 优化后续）
 - [x] `onStoreDocument`：防抖落 `yjs_snapshots`（snapshot-only；增量 + 压实后续）
-- [ ] Redis pub/sub 多实例广播；WS 关闭码 4401/4403/4404/1011
+- [~] Redis pub/sub 多实例广播；WS 关闭码 4401/4403/4404/1011（✅ `@hocuspocus/extension-redis`，`COLLAB_REDIS_URL` 设置时启用跨实例广播 update+awareness，留空单实例；createClient 工厂自建 pub/sub 连接附 error 监听 + 退避重连，避免 Redis 不可用刷屏；onAuthenticate 失败按场景抛带 code 的 CloseError → 4401 无效 token / 4404 map 不存在·跨租户 / 4403 非成员 / 1011 服务端错误。已真实验证：typecheck+lint、单实例+Redis 两条启动路径 listen、Redis 不可用时不刷屏。**待 infra：真正的多实例广播 + 持久化 e2e（`scripts/e2e.mjs` 需 Postgres）**）
 - [x] 前端 children 派生索引（监听 nodes 增量更新，不双写 children）📄 Yjs §2
 
 ### M0.6 命令层（packages/shared + web）
