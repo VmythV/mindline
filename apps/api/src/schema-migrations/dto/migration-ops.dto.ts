@@ -2,16 +2,7 @@
  * 迁移算子 DTO —— M4 首发 5 个高频算子（Schema迁移工具详设 §3.1）。
  * 使用 discriminated union 通过 type 字段区分算子类型，由 class-validator 逐个校验。
  */
-import { Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsIn,
-  IsObject,
-  IsOptional,
-  IsString,
-  ValidateIf,
-  ValidateNested,
-} from 'class-validator';
+import { IsBoolean, IsIn, IsObject, IsOptional, IsString, ValidateIf } from 'class-validator';
 
 /** 支持的算子名列表（M4 首发 5 个） */
 export const MIGRATION_OP_NAMES = [

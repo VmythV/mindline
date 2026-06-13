@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsBoolean, ValidateNested } from 'class-validator';
+import { IsArray, IsInt, IsOptional, ValidateNested } from 'class-validator';
 import { MigrationOpDto } from './migration-ops.dto';
 
 export class MigrationPreviewDto {
