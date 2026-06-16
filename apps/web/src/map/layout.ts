@@ -20,6 +20,8 @@ export interface CardData extends Record<string, unknown> {
   collapsed?: boolean;
   /** 直接子节点数（折叠态下用于角标提示隐藏了多少）。 */
   childCount?: number;
+  /** 刚创建节点的短动效标记。 */
+  recent?: boolean;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import type { FieldDef } from '@mindline/shared';
@@ -6,13 +7,48 @@ const inputCls =
   'w-full mt-1 px-2 py-1 rounded border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300';
 
 function RichText({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [draft, setDraft] = useState(value || '');
+  const draftRef = useRef(value || '');
+  const composingRef = useRef(false);
+  const updateDraft = (next: string) => {
+    draftRef.current = next;
+    setDraft(next);
+  };
   const editor = useEditor({
     extensions: [StarterKit],
-    content: value || '',
-    onUpdate: ({ editor }) => onChange(editor.getHTML()),
+    content: draft,
+    onUpdate: ({ editor }) => updateDraft(editor.getHTML()),
+    editorProps: {
+      handleDOMEvents: {
+        compositionstart: () => {
+          composingRef.current = true;
+          return false;
+        },
+        compositionend: () => {
+          composingRef.current = false;
+          return false;
+        },
+        blur: () => {
+          onChange(draftRef.current);
+          return false;
+        },
+      },
+    },
   });
+  useEffect(() => {
+    const next = value || '';
+    updateDraft(next);
+    if (editor && editor.getHTML() !== next) {
+      editor.commands.setContent(next, false);
+    }
+  }, [editor, value]);
   return (
-    <div className="mt-1 border border-slate-200 rounded p-2 text-sm text-slate-800">
+    <div
+      data-map-shortcuts="off"
+      className="mt-1 border border-slate-200 rounded p-2 text-sm text-slate-800"
+      onKeyDown={(e) => e.stopPropagation()}
+      onKeyUp={(e) => e.stopPropagation()}
+    >
       <EditorContent editor={editor} />
     </div>
   );
@@ -28,6 +64,18 @@ export function DynamicField({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = () => onChange(draft);
+  const commitOnEnter = (e: KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      onChange(draft);
+      (e.currentTarget as HTMLElement).blur();
+    }
+  };
+
   switch (field.type) {
     case 'richtext':
       return <RichText value={(value as string) ?? ''} onChange={onChange} />;
@@ -36,8 +84,10 @@ export function DynamicField({
         <input
           type="number"
           className={inputCls}
-          value={value === undefined || value === null ? '' : String(value)}
-          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+          value={draft === undefined || draft === null ? '' : String(draft)}
+          onChange={(e) => setDraft(e.target.value === '' ? null : Number(e.target.value))}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     case 'date':
@@ -45,8 +95,10 @@ export function DynamicField({
         <input
           type="date"
           className={inputCls}
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          value={(draft as string) ?? ''}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     case 'datetime':
@@ -54,8 +106,10 @@ export function DynamicField({
         <input
           type="datetime-local"
           className={inputCls}
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          value={(draft as string) ?? ''}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     case 'checkbox':
@@ -65,6 +119,8 @@ export function DynamicField({
           className="mt-1"
           checked={!!value}
           onChange={(e) => onChange(e.target.checked)}
+          onKeyDown={(e) => e.stopPropagation()}
+          onKeyUp={(e) => e.stopPropagation()}
         />
       );
     case 'enum':
@@ -73,6 +129,8 @@ export function DynamicField({
           className={inputCls}
           value={(value as string) ?? ''}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.stopPropagation()}
+          onKeyUp={(e) => e.stopPropagation()}
         >
           <option value="">—</option>
           {(field.options ?? []).map((o) => (
@@ -94,6 +152,8 @@ export function DynamicField({
                 onChange={(e) =>
                   onChange(e.target.checked ? [...arr, o] : arr.filter((x) => x !== o))
                 }
+                onKeyDown={(e) => e.stopPropagation()}
+                onKeyUp={(e) => e.stopPropagation()}
               />
               {o}
             </label>
@@ -102,20 +162,22 @@ export function DynamicField({
       );
     }
     case 'tags': {
-      const arr = Array.isArray(value) ? (value as string[]) : [];
+      const draftArr = Array.isArray(draft) ? (draft as string[]) : [];
       return (
         <input
           className={inputCls}
           placeholder="逗号分隔"
-          value={arr.join(', ')}
+          value={draftArr.join(', ')}
           onChange={(e) =>
-            onChange(
+            setDraft(
               e.target.value
                 .split(',')
                 .map((s) => s.trim())
                 .filter(Boolean),
             )
           }
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     }
@@ -125,8 +187,10 @@ export function DynamicField({
           type="url"
           className={inputCls}
           placeholder="https://"
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          value={(draft as string) ?? ''}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     case 'user':
@@ -134,8 +198,10 @@ export function DynamicField({
         <input
           className={inputCls}
           placeholder="用户 ID（M1 简化）"
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          value={(draft as string) ?? ''}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
     case 'text':
@@ -143,8 +209,10 @@ export function DynamicField({
       return (
         <input
           className={inputCls}
-          value={(value as string) ?? ''}
-          onChange={(e) => onChange(e.target.value)}
+          value={(draft as string) ?? ''}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={commitOnEnter}
         />
       );
   }

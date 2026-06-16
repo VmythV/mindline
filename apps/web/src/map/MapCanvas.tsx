@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Background,
+  BackgroundVariant,
+  ControlButton,
   Controls,
   ReactFlow,
   useEdgesState,
@@ -9,6 +11,7 @@ import {
   type Node,
   type NodeMouseHandler,
   type OnNodeDrag,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import type { HocuspocusProvider } from '@hocuspocus/provider';
 import { useAuth } from '../stores/auth';
@@ -22,9 +25,42 @@ import { MapRepository } from './MapRepository';
 import { useProposal } from './useProposal';
 import { useViewFilter } from './useViewFilter';
 import type { NodeView } from './types';
+import { useDialog } from '../ui/DialogProvider';
 
 const nodeTypes = { card: NodeCard };
 const DROP_RADIUS = 160;
+const EDGE_THEMES = {
+  ocean: {
+    label: '海洋',
+    colors: ['#2563eb', '#0891b2', '#0d9488', '#65a30d'],
+    background: '#eff6ff',
+  },
+  forest: {
+    label: '森林',
+    colors: ['#15803d', '#4d7c0f', '#0f766e', '#a16207'],
+    background: '#f0fdf4',
+  },
+  sunset: {
+    label: '日落',
+    colors: ['#dc2626', '#ea580c', '#d97706', '#be123c'],
+    background: '#fff7ed',
+  },
+  slate: {
+    label: '石板',
+    colors: ['#475569', '#64748b', '#0f766e', '#7c3aed'],
+    background: '#f8fafc',
+  },
+} as const;
+type EdgeThemeKey = keyof typeof EDGE_THEMES;
+type EdgeColorMode = 'single' | 'varied';
+type CanvasMode = 'dots' | 'plain';
+
+function shouldIgnoreMapShortcut(active: Element | null): boolean {
+  if (!(active instanceof HTMLElement)) return false;
+  return !!active.closest(
+    'input, textarea, select, button, [contenteditable="true"], .ProseMirror, [data-map-shortcuts="off"]',
+  );
+}
 
 interface PeerUser {
   id: string;
@@ -94,6 +130,15 @@ export function MapCanvas({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<Node<CardData>>([]);
   const [rfEdges, setRfEdges] = useEdgesState<Edge>([]);
+  const [rfInstance, setRfInstance] = useState<ReactFlowInstance<Node<CardData>, Edge> | null>(
+    null,
+  );
+  const [pendingFocusId, setPendingFocusId] = useState<string | null>(null);
+  const [recentIds, setRecentIds] = useState<Set<string>>(new Set());
+  const [edgeTheme, setEdgeTheme] = useState<EdgeThemeKey>('ocean');
+  const [edgeColorMode, setEdgeColorMode] = useState<EdgeColorMode>('varied');
+  const [canvasMode, setCanvasMode] = useState<CanvasMode>('dots');
+  const dialog = useDialog();
   const ai = useProposal(repo);
   const viewFilter = useViewFilter(user?.id ?? '');
 
@@ -174,9 +219,94 @@ export function MapCanvas({
 
   useEffect(() => {
     const { rfNodes: ln, rfEdges: le } = layout(nodesWithPrivate, collapsed);
-    setRfNodes(ln.map((n) => ({ ...n, selected: n.id === selectedId })));
-    setRfEdges(le);
-  }, [nodesWithPrivate, selectedId, collapsed, setRfNodes, setRfEdges]);
+    const childrenByParent = new Map<string, typeof nodesWithPrivate>();
+    for (const node of nodesWithPrivate) {
+      const parentKey = node.parentId ?? '__root__';
+      const children = childrenByParent.get(parentKey) ?? [];
+      children.push(node);
+      childrenByParent.set(parentKey, children);
+    }
+    const siblingIndexById = new Map<string, number>();
+    for (const children of childrenByParent.values()) {
+      children
+        .slice()
+        .sort((a, b) => (a.order < b.order ? -1 : a.order > b.order ? 1 : 0))
+        .forEach((node, index) => siblingIndexById.set(node.id, index));
+    }
+    const theme = EDGE_THEMES[edgeTheme];
+    setRfNodes(
+      ln.map((n) => ({
+        ...n,
+        selected: n.id === selectedId,
+        data: { ...n.data, recent: recentIds.has(n.id) },
+      })),
+    );
+    setRfEdges(
+      le.map((e) => {
+        const targetSiblingIndex = siblingIndexById.get(e.target) ?? 0;
+        const stroke =
+          edgeColorMode === 'single'
+            ? theme.colors[0]
+            : theme.colors[targetSiblingIndex % theme.colors.length];
+        return {
+          ...e,
+          style: { stroke, strokeWidth: 2 },
+        };
+      }),
+    );
+  }, [
+    nodesWithPrivate,
+    selectedId,
+    collapsed,
+    setRfNodes,
+    setRfEdges,
+    edgeTheme,
+    edgeColorMode,
+    recentIds,
+  ]);
+
+  useEffect(() => {
+    if (!pendingFocusId || !rfInstance) return;
+    const node = rfNodes.find((n) => n.id === pendingFocusId);
+    if (!node) return;
+    setPendingFocusId(null);
+    void rfInstance.setCenter(node.position.x + 90, node.position.y + 28, {
+      zoom: 1.1,
+      duration: 260,
+    });
+  }, [pendingFocusId, rfInstance, rfNodes]);
+
+  const focusCreatedNode = useCallback((id: string) => {
+    setSelectedId(id);
+    setEditingId(id);
+    setPendingFocusId(id);
+    setRecentIds((prev) => new Set(prev).add(id));
+    window.setTimeout(() => {
+      setRecentIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }, 520);
+  }, []);
+
+  const createChildAndFocus = useCallback(
+    (parentId: string) => {
+      focusCreatedNode(repo.createChild(parentId));
+    },
+    [focusCreatedNode, repo],
+  );
+
+  const createSiblingAndFocus = useCallback(
+    (nodeId: string) => {
+      focusCreatedNode(repo.createSibling(nodeId));
+    },
+    [focusCreatedNode, repo],
+  );
+
+  const fitCanvas = useCallback(() => {
+    void rfInstance?.fitView({ padding: 0.16, duration: 280, includeHiddenNodes: false });
+  }, [rfInstance]);
 
   const onNodeDragStop: OnNodeDrag<Node<CardData>> = useCallback(
     (_e, dragged) => {
@@ -204,11 +334,7 @@ export function MapCanvas({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const active = document.activeElement;
-      if (
-        active &&
-        (active.tagName === 'INPUT' || active.getAttribute('contenteditable') === 'true')
-      )
-        return;
+      if (shouldIgnoreMapShortcut(active)) return;
 
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'f')) {
@@ -260,10 +386,10 @@ export function MapCanvas({
 
       if (e.key === 'Tab') {
         e.preventDefault();
-        setSelectedId(repo.createChild(selectedId));
+        createChildAndFocus(selectedId);
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        setSelectedId(repo.createSibling(selectedId));
+        createSiblingAndFocus(selectedId);
       } else if (e.key === 'F2') {
         e.preventDefault();
         setEditingId(selectedId);
@@ -278,7 +404,15 @@ export function MapCanvas({
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, repo, nodes, collapsed, toggleCollapse]);
+  }, [
+    selectedId,
+    repo,
+    nodes,
+    collapsed,
+    toggleCollapse,
+    createChildAndFocus,
+    createSiblingAndFocus,
+  ]);
 
   const onNodeClick: NodeMouseHandler<Node<CardData>> = (_e, node) => setSelectedId(node.id);
   const onNodeContextMenu: NodeMouseHandler<Node<CardData>> = (e, node) => {
@@ -287,12 +421,20 @@ export function MapCanvas({
     setCtxMenu({ x: e.clientX, y: e.clientY, nodeId: node.id });
   };
 
-  const selectedNode = selectedId ? (nodesWithPrivate.find((n) => n.id === selectedId) ?? null) : null;
+  const selectedNode = selectedId
+    ? (nodesWithPrivate.find((n) => n.id === selectedId) ?? null)
+    : null;
   const selfName = user?.displayName ?? '我';
   const selfColor = user ? colorFor(user.id) : '#888';
 
-  const startDecompose = (nodeId: string) => {
-    const p = window.prompt('AI 拆解 · 补充要求（可留空；点取消则不拆解）');
+  const startDecompose = async (nodeId: string) => {
+    const p = await dialog.prompt({
+      tone: 'info',
+      title: 'AI 拆解',
+      message: '补充要求可留空；取消则不拆解。',
+      placeholder: '例如：按执行步骤拆成 5 个子节点',
+      confirmText: '开始拆解',
+    });
     if (p === null) return;
     ai.start({ nodeId, prompt: p || undefined });
   };
@@ -336,7 +478,6 @@ export function MapCanvas({
       source: p.anchorNodeId,
       target: `shadow-${op.tempId}`,
       type: 'smoothstep',
-      animated: true,
       style: { stroke: '#cbd5e1', strokeDasharray: '4 4' },
     }));
   }, [ai.proposal]);
@@ -347,13 +488,13 @@ export function MapCanvas({
           id: 'child',
           label: '＋ 新建子节点',
           hint: 'Tab',
-          run: () => setSelectedId(repo.createChild(selectedId)),
+          run: () => createChildAndFocus(selectedId),
         },
         {
           id: 'sibling',
           label: '＋ 新建同级节点',
           hint: 'Enter',
-          run: () => setSelectedId(repo.createSibling(selectedId)),
+          run: () => createSiblingAndFocus(selectedId),
         },
         { id: 'rename', label: '✎ 重命名选中', hint: 'F2', run: () => setEditingId(selectedId) },
         {
@@ -375,8 +516,8 @@ export function MapCanvas({
     : [];
 
   const ctxItems = (nodeId: string): ContextMenuItem[] => [
-    { label: '新建子节点', run: () => setSelectedId(repo.createChild(nodeId)) },
-    { label: '新建同级节点', run: () => setSelectedId(repo.createSibling(nodeId)) },
+    { label: '新建子节点', run: () => createChildAndFocus(nodeId) },
+    { label: '新建同级节点', run: () => createSiblingAndFocus(nodeId) },
     {
       label: '重命名',
       run: () => {
@@ -398,6 +539,41 @@ export function MapCanvas({
   return (
     <div className="h-full flex">
       <div className="flex-1 min-w-0 relative">
+        <div
+          className="absolute top-3 left-3 z-10 flex items-center gap-2 bg-white/90 backdrop-blur border border-slate-200 rounded-lg px-2 py-1 shadow text-xs"
+          data-map-shortcuts="off"
+        >
+          <label className="text-slate-400">线条</label>
+          <select
+            className="bg-transparent text-slate-700 outline-none"
+            value={edgeColorMode}
+            onChange={(e) => setEdgeColorMode(e.target.value as EdgeColorMode)}
+          >
+            <option value="varied">多色</option>
+            <option value="single">单色</option>
+          </select>
+          <select
+            className="bg-transparent text-slate-700 outline-none"
+            value={edgeTheme}
+            onChange={(e) => setEdgeTheme(e.target.value as EdgeThemeKey)}
+          >
+            {Object.entries(EDGE_THEMES).map(([key, theme]) => (
+              <option key={key} value={key}>
+                {theme.label}
+              </option>
+            ))}
+          </select>
+          <span className="h-4 w-px bg-slate-200" />
+          <label className="text-slate-400">画布</label>
+          <select
+            className="bg-transparent text-slate-700 outline-none"
+            value={canvasMode}
+            onChange={(e) => setCanvasMode(e.target.value as CanvasMode)}
+          >
+            <option value="dots">点阵</option>
+            <option value="plain">纯白</option>
+          </select>
+        </div>
         <div className="absolute top-3 right-3 z-10 flex -space-x-2">
           <Avatar name={selfName} color={selfColor} title={`${selfName}（我）`} />
           {peers.map((p) => (
@@ -406,7 +582,10 @@ export function MapCanvas({
         </div>
 
         {/* 视图过滤工具栏 */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-white/90 backdrop-blur border border-slate-200 rounded-full px-3 py-1.5 shadow text-xs">
+        <div
+          className="absolute bottom-4 left-16 z-10 flex items-center gap-1 bg-white/90 backdrop-blur border border-slate-200 rounded-full px-3 py-1.5 shadow text-xs"
+          data-map-shortcuts="off"
+        >
           <button
             title="只看我的节点"
             onClick={viewFilter.toggleOnlyMe}
@@ -427,9 +606,7 @@ export function MapCanvas({
               × 清除
             </button>
           )}
-          {!viewFilter.isActive && (
-            <span className="text-slate-300 select-none">过滤</span>
-          )}
+          {!viewFilter.isActive && <span className="text-slate-300 select-none">过滤</span>}
         </div>
         {ai.proposal && (
           <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 bg-white shadow-lg rounded-lg border border-slate-200 px-3 py-2 flex items-center gap-2 text-xs">
@@ -453,7 +630,7 @@ export function MapCanvas({
               className="px-2 py-0.5 rounded bg-blue-500 text-white hover:bg-blue-600"
               onClick={() => {
                 const ids = ai.apply();
-                if (ids[0]) setSelectedId(ids[0]);
+                if (ids[0]) focusCreatedNode(ids[0]);
               }}
             >
               写入
@@ -475,13 +652,31 @@ export function MapCanvas({
           onNodeContextMenu={onNodeContextMenu}
           onNodeDragStop={onNodeDragStop}
           onPaneClick={() => setSelectedId(null)}
+          onInit={setRfInstance}
           fitView
+          fitViewOptions={{ padding: 0.16, includeHiddenNodes: false }}
+          minZoom={0.05}
+          maxZoom={4}
           // M0.7 视口虚拟化：仅挂载视口内 + 缓冲区的节点 DOM，大图（1000 节点）维持 ≥30FPS
           onlyRenderVisibleElements
           proOptions={{ hideAttribution: true }}
+          style={{
+            background: canvasMode === 'plain' ? '#ffffff' : EDGE_THEMES[edgeTheme].background,
+          }}
         >
-          <Background />
-          <Controls />
+          {canvasMode === 'dots' && (
+            <Background
+              color={EDGE_THEMES[edgeTheme].colors[0]}
+              variant={BackgroundVariant.Dots}
+              gap={18}
+              size={1.2}
+            />
+          )}
+          <Controls showFitView={false} fitViewOptions={{ padding: 0.16 }}>
+            <ControlButton title="适应画布" aria-label="适应画布" onClick={fitCanvas}>
+              ⤢
+            </ControlButton>
+          </Controls>
         </ReactFlow>
       </div>
       {selectedNode && (

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import type { Project, ProjectList } from '../lib/types';
+import { useDialog } from '../ui/DialogProvider';
 
 /** 单个项目行 + 懒加载子项目树 */
 function ProjectRow({
@@ -16,9 +17,13 @@ function ProjectRow({
   onNavigate: (p: Project) => void;
 }) {
   const queryClient = useQueryClient();
+  const dialog = useDialog();
   const [expanded, setExpanded] = useState(false);
   const [addingChild, setAddingChild] = useState(false);
   const [childName, setChildName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(project.name);
+  useEffect(() => setEditName(project.name), [project.name]);
 
   const childrenQuery = useQuery({
     queryKey: ['projects', project.id, 'children'],
@@ -39,6 +44,37 @@ function ProjectRow({
     },
   });
 
+  const updateProject = useMutation({
+    mutationFn: (body: Partial<Pick<Project, 'name' | 'archived'>>) =>
+      api<Project>(`/projects/${project.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const deleteProject = useMutation({
+    mutationFn: () => api<void>(`/projects/${project.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+  });
+
+  const commitEdit = () => {
+    if (updateProject.isPending) return;
+    const next = editName.trim();
+    if (!next) {
+      setEditName(project.name);
+      setEditing(false);
+      return;
+    }
+    if (next !== project.name) updateProject.mutate({ name: next });
+    else setEditing(false);
+  };
+
   const indent = depth * 20;
 
   return (
@@ -58,15 +94,61 @@ function ProjectRow({
           {expanded ? '▾' : '▸'}
         </button>
 
-        {/* 项目名称 */}
-        <span
-          className="flex-1 font-medium text-slate-800 cursor-pointer hover:text-blue-600 truncate"
-          onClick={() => onNavigate(project)}
-        >
-          {project.name}
-        </span>
+        {editing ? (
+          <input
+            autoFocus
+            className="flex-1 px-2 py-1 text-sm rounded border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') {
+                setEditName(project.name);
+                setEditing(false);
+              }
+            }}
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
+          <span
+            className={`flex-1 font-medium cursor-pointer hover:text-blue-600 truncate ${
+              project.archived ? 'text-slate-400 line-through' : 'text-slate-800'
+            }`}
+            onClick={() => onNavigate(project)}
+          >
+            {project.name}
+          </span>
+        )}
+
+        {project.archived && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-400">
+            已归档
+          </span>
+        )}
 
         {/* 操作按钮（hover 显示） */}
+        <button
+          className="opacity-0 group-hover:opacity-100 text-xs text-slate-400 hover:text-blue-600 px-2 py-0.5 rounded shrink-0"
+          disabled={updateProject.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditName(project.name);
+            setEditing(true);
+          }}
+        >
+          修改
+        </button>
+        <button
+          className="opacity-0 group-hover:opacity-100 text-xs text-slate-400 hover:text-amber-600 px-2 py-0.5 rounded shrink-0"
+          disabled={updateProject.isPending}
+          onClick={(e) => {
+            e.stopPropagation();
+            updateProject.mutate({ archived: !project.archived });
+          }}
+        >
+          {project.archived ? '恢复' : '归档'}
+        </button>
         <button
           className="opacity-0 group-hover:opacity-100 text-xs text-slate-400 hover:text-blue-600 px-2 py-0.5 rounded shrink-0"
           onClick={(e) => {
@@ -76,6 +158,23 @@ function ProjectRow({
           }}
         >
           + 子项目
+        </button>
+        <button
+          className="opacity-0 group-hover:opacity-100 text-xs text-slate-400 hover:text-red-600 px-2 py-0.5 rounded shrink-0"
+          disabled={deleteProject.isPending}
+          onClick={async (e) => {
+            e.stopPropagation();
+            const ok = await dialog.confirm({
+              tone: 'danger',
+              title: `删除项目「${project.name}」？`,
+              message: '子项目、地图数据和相关历史会一起删除。此操作不可撤销。',
+              confirmText: '删除',
+            });
+            if (!ok) return;
+            deleteProject.mutate();
+          }}
+        >
+          删除
         </button>
       </li>
 
@@ -126,12 +225,7 @@ function ProjectRow({
             </li>
           )}
           {childrenQuery.data?.items.map((child) => (
-            <ProjectRow
-              key={child.id}
-              project={child}
-              depth={depth + 1}
-              onNavigate={onNavigate}
-            />
+            <ProjectRow key={child.id} project={child} depth={depth + 1} onNavigate={onNavigate} />
           ))}
           {childrenQuery.data?.items.length === 0 && !addingChild && (
             <li

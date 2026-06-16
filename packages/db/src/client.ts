@@ -1,4 +1,5 @@
 import path from 'path';
+import { existsSync } from 'fs';
 import { drizzle as pgDrizzle } from 'drizzle-orm/postgres-js';
 import { drizzle as libsqlDrizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
@@ -11,6 +12,17 @@ const driver = process.env.DB_DRIVER ?? 'sqlite';
 /** 解析 SQLite 文件路径：优先 SQLITE_PATH 环境变量，否则定位到 packages/db/.dev.db */
 function resolveSqlitePath(): string {
   if (process.env.SQLITE_PATH) return process.env.SQLITE_PATH;
+
+  let dir = process.cwd();
+  while (true) {
+    if (existsSync(path.join(dir, 'pnpm-workspace.yaml'))) {
+      return path.join(dir, 'packages/db/.dev.db');
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
   try {
     // import.meta.url 在 ESM 为文件 URL；tsup 的 CJS 构建会将其转换为 pathToFileURL(__filename)
     // dist/index.js → ../  → packages/db/

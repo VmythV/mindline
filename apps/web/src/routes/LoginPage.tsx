@@ -4,11 +4,15 @@ import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import type { AuthResponse } from '../lib/types';
 
+const TEST_EMAIL = 'a@a.com';
+const TEST_PASSWORD = 'a';
+const TEST_DISPLAY_NAME = '测试用户';
+
 export function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState(TEST_EMAIL);
+  const [password, setPassword] = useState(TEST_PASSWORD);
+  const [displayName, setDisplayName] = useState(TEST_DISPLAY_NAME);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -20,9 +24,37 @@ export function LoginPage() {
     setLoading(true);
     try {
       const path = mode === 'login' ? '/auth/login' : '/auth/register';
-      const body =
-        mode === 'login' ? { email, password } : { email, password, displayName };
+      const body = mode === 'login' ? { email, password } : { email, password, displayName };
       const resp = await api<AuthResponse>(path, { method: 'POST', body: JSON.stringify(body) });
+      setAuth(resp);
+      navigate('/');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function testLogin() {
+    setError('');
+    setLoading(true);
+    try {
+      let resp: AuthResponse;
+      try {
+        resp = await api<AuthResponse>('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+        });
+      } catch {
+        resp = await api<AuthResponse>('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            email: TEST_EMAIL,
+            password: TEST_PASSWORD,
+            displayName: TEST_DISPLAY_NAME,
+          }),
+        });
+      }
       setAuth(resp);
       navigate('/');
     } catch (err) {
@@ -34,7 +66,10 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <form onSubmit={submit} className="w-96 bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-5">
+      <form
+        onSubmit={submit}
+        className="w-96 bg-white p-8 rounded-2xl shadow-sm border border-slate-100 space-y-5"
+      >
         <div>
           <h1 className="text-2xl font-semibold text-slate-800">思谱 Mindline</h1>
           <p className="text-sm text-slate-400 mt-1">思维导图 × AI 拆解 × 时间轴</p>
@@ -60,7 +95,7 @@ export function LoginPage() {
         <input
           className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
           type="password"
-          placeholder="密码（≥8 位）"
+          placeholder="密码"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
@@ -74,6 +109,15 @@ export function LoginPage() {
           className="w-full py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50"
         >
           {loading ? '处理中…' : mode === 'login' ? '登录' : '注册'}
+        </button>
+
+        <button
+          type="button"
+          disabled={loading}
+          className="w-full py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-medium hover:bg-blue-100 disabled:opacity-50"
+          onClick={testLogin}
+        >
+          测试登录 a@a.com
         </button>
 
         <button

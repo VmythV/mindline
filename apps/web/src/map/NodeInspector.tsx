@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, apiStream } from '../lib/api';
 import type { ChangeList, NodeTypeList } from '../lib/types';
@@ -6,6 +6,7 @@ import type { MapRepository } from './MapRepository';
 import type { NodeView } from './types';
 import { DynamicField } from './DynamicField';
 import type { NodeLink } from '@mindline/shared';
+import { useDialog } from '../ui/DialogProvider';
 
 const OP_LABEL: Record<string, string> = {
   create: '创建',
@@ -90,6 +91,7 @@ function NodeLinksPanel({ repo, node }: { repo: MapRepository; node: NodeView })
             value={inputId}
             onChange={(e) => setInputId(e.target.value.trim())}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === 'Enter' && inputId) {
                 repo.addLink(node.id, { kind, targetId: inputId });
                 setInputId('');
@@ -111,19 +113,16 @@ function NodeLinksPanel({ repo, node }: { repo: MapRepository; node: NodeView })
         </div>
       )}
 
-      {links.length === 0 && !addOpen && (
-        <p className="text-xs text-slate-400">暂无引用</p>
-      )}
+      {links.length === 0 && !addOpen && <p className="text-xs text-slate-400">暂无引用</p>}
 
       <ul className="space-y-1">
         {links.map((l) => {
           const info = refMap.get(l.targetId);
           return (
-            <li
-              key={`${l.kind}-${l.targetId}`}
-              className="flex items-center gap-1 text-xs"
-            >
-              <span className="shrink-0 text-slate-400">{l.kind === 'subproject' ? '📁' : '🔗'}</span>
+            <li key={`${l.kind}-${l.targetId}`} className="flex items-center gap-1 text-xs">
+              <span className="shrink-0 text-slate-400">
+                {l.kind === 'subproject' ? '📁' : '🔗'}
+              </span>
               <span className="flex-1 text-blue-600 truncate" title={l.targetId}>
                 {info ? `${info.projectName} / ${info.title}` : l.targetId}
               </span>
@@ -154,8 +153,11 @@ export function NodeInspector({
   myUserId?: string;
 }) {
   const qc = useQueryClient();
+  const dialog = useDialog();
   const [title, setTitle] = useState(node.title);
   const [commentDraft, setCommentDraft] = useState('');
+  useEffect(() => setTitle(node.title), [node.id, node.title]);
+  const commitTitle = () => repo.rename(node.id, title.trim() || '未命名');
 
   const { data: types } = useQuery({
     queryKey: ['node-types', projectId],
@@ -173,8 +175,7 @@ export function NodeInspector({
 
   const { data: comments } = useQuery({
     queryKey: ['comments', repo.mapId, node.id],
-    queryFn: () =>
-      api<{ items: Comment[] }>(`/maps/${repo.mapId}/nodes/${node.id}/comments`),
+    queryFn: () => api<{ items: Comment[] }>(`/maps/${repo.mapId}/nodes/${node.id}/comments`),
     refetchInterval: 8000,
   });
 
@@ -187,6 +188,7 @@ export function NodeInspector({
     onSuccess: () => {
       setCommentDraft('');
       void qc.invalidateQueries({ queryKey: ['comments', repo.mapId, node.id] });
+      void qc.invalidateQueries({ queryKey: ['node-history', repo.mapId, node.id] });
     },
   });
 
@@ -195,6 +197,7 @@ export function NodeInspector({
       api(`/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ resolved }) }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['comments', repo.mapId, node.id] });
+      void qc.invalidateQueries({ queryKey: ['node-history', repo.mapId, node.id] });
     },
   });
 
@@ -204,25 +207,34 @@ export function NodeInspector({
   const runSummarize = () => {
     setSummary('');
     setSummarizing(true);
-    void apiStream(
-      '/ai/summarize',
-      { mapId: repo.mapId, nodeId: node.id },
-      (event, data) => {
-        if (event === 'delta') setSummary((s) => s + ((data as { text?: string }).text ?? ''));
-        else if (event === 'done' || event === 'error') setSummarizing(false);
-      },
-    ).catch(() => setSummarizing(false));
+    void apiStream('/ai/summarize', { mapId: repo.mapId, nodeId: node.id }, (event, data) => {
+      if (event === 'delta') setSummary((s) => s + ((data as { text?: string }).text ?? ''));
+      else if (event === 'done' || event === 'error') setSummarizing(false);
+    }).catch(() => setSummarizing(false));
   };
 
   return (
-    <aside className="w-80 shrink-0 border-l border-slate-200 bg-white p-4 space-y-4 overflow-auto">
+    <aside
+      data-map-shortcuts="off"
+      className="w-80 shrink-0 border-l border-slate-200 bg-white p-4 space-y-4 overflow-auto"
+      onKeyDown={(e) => e.stopPropagation()}
+      onKeyUp={(e) => e.stopPropagation()}
+    >
       <div>
         <label className="text-xs text-slate-400">标题</label>
         <input
           className="w-full mt-1 px-2 py-1 rounded border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-300"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          onBlur={() => repo.rename(node.id, title.trim() || '未命名')}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              commitTitle();
+              e.currentTarget.blur();
+            }
+          }}
         />
       </div>
 
@@ -230,9 +242,15 @@ export function NodeInspector({
         <label className="text-xs text-slate-400">私有节点</label>
         <button
           title={node.private ? '取消私有（软权限）' : '标记为私有（软权限，前端隐藏内容）'}
-          onClick={() => {
+          onClick={async () => {
             if (!node.private) {
-              if (!confirm('标记为私有后，无权限的成员只能看到占位骨架，内容前端隐藏（软隔离）。确认？')) return;
+              const ok = await dialog.confirm({
+                tone: 'warning',
+                title: '标记为私有节点？',
+                message: '无权限成员只能看到占位骨架，内容会在前端隐藏。这是软隔离。',
+                confirmText: '标记为私有',
+              });
+              if (!ok) return;
             }
             repo.setPrivate(node.id, !node.private);
           }}
@@ -307,6 +325,8 @@ export function NodeInspector({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               placeholder="生成中…"
+              onKeyDown={(e) => e.stopPropagation()}
+              onKeyUp={(e) => e.stopPropagation()}
             />
             <button
               className="mt-1 text-xs text-slate-500 hover:text-blue-600 disabled:opacity-50"
@@ -333,7 +353,7 @@ export function NodeInspector({
                 <span className="font-medium text-slate-700">{c.displayName}</span>
                 <div className="flex items-center gap-1">
                   <span className="text-slate-400">{fmtTime(c.createdAt)}</span>
-                  {(myUserId === c.authorId || true) && (
+                  {myUserId && (
                     <button
                       title={c.resolved ? '重新打开' : '标记已解决'}
                       onClick={() => resolveComment.mutate({ id: c.id, resolved: !c.resolved })}
@@ -347,9 +367,7 @@ export function NodeInspector({
               <p className="text-slate-600 whitespace-pre-wrap">{c.body}</p>
             </li>
           ))}
-          {comments?.items.length === 0 && (
-            <li className="text-xs text-slate-400">暂无评论</li>
-          )}
+          {comments?.items.length === 0 && <li className="text-xs text-slate-400">暂无评论</li>}
         </ul>
         <div className="mt-2 flex gap-1">
           <input
@@ -358,6 +376,7 @@ export function NodeInspector({
             value={commentDraft}
             onChange={(e) => setCommentDraft(e.target.value)}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === 'Enter' && !e.shiftKey && commentDraft.trim()) {
                 e.preventDefault();
                 addComment.mutate(commentDraft.trim());

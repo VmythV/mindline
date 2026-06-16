@@ -1,5 +1,5 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lt, lte, or, sql } from 'drizzle-orm';
 import * as Y from 'yjs';
 import { type NodeSnapshot, type Role } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
@@ -38,6 +38,12 @@ const SNAPSHOT_TOP_KEYS = new Set([
   'links',
   'private',
 ]);
+
+const isSqlite = (process.env.DB_DRIVER ?? 'sqlite') === 'sqlite';
+
+function tsMillis(value: Date | number): number {
+  return value instanceof Date ? value.getTime() : value;
+}
 
 /** Y.Map 节点（toJSON 后的普通对象）→ 契约快照形态。 */
 function toNodeSnapshot(n: Record<string, unknown>): NodeSnapshot {
@@ -128,19 +134,27 @@ export class ChangesService {
     if (opts.nodeId) conds.push(eq(ce.nodeId, opts.nodeId));
     if (opts.actor) conds.push(eq(ce.actorId, opts.actor));
     if (opts.op) conds.push(eq(ce.op, opts.op));
-    if (opts.from) conds.push(gte(ce.ts, new Date(opts.from)));
-    if (opts.to) conds.push(lte(ce.ts, new Date(opts.to)));
+    if (opts.from)
+      conds.push(isSqlite ? sql`${ce.ts} >= ${opts.from}` : gte(ce.ts, new Date(opts.from)));
+    if (opts.to) conds.push(isSqlite ? sql`${ce.ts} <= ${opts.to}` : lte(ce.ts, new Date(opts.to)));
     // branch：命中子树根自身，或其 path_ids（祖先链，不含自身）含该根 → 走 ix_changes_path GIN
     if (opts.branch) {
-      conds.push(sql`(${ce.nodeId} = ${opts.branch} or ${opts.branch} = any(${ce.pathIds}))`);
+      conds.push(
+        isSqlite
+          ? or(eq(ce.nodeId, opts.branch), sql`${ce.pathIds} like ${`%"${opts.branch}"%`}`)!
+          : sql`(${ce.nodeId} = ${opts.branch} or ${opts.branch} = any(${ce.pathIds}))`,
+      );
     }
     // keyset 游标：按 (ts, id) 降序翻页，cursor 形如 "<tsMillis>:<id>"
     if (opts.cursor) {
       const [tsStr, idStr] = opts.cursor.split(':');
       const cTs = Number(tsStr);
       if (Number.isFinite(cTs) && idStr) {
-        // 注意：裸 sql 模板不可直接绑定 Date，用 to_timestamp(秒) 传数字
-        conds.push(sql`(${ce.ts}, ${ce.id}) < (to_timestamp(${cTs / 1000}), ${idStr})`);
+        conds.push(
+          isSqlite
+            ? or(sql`${ce.ts} < ${cTs}`, and(sql`${ce.ts} = ${cTs}`, lt(ce.id, idStr)))!
+            : sql`(${ce.ts}, ${ce.id}) < (to_timestamp(${cTs / 1000}), ${idStr})`,
+        );
       }
     }
     const limit = Math.min(opts.limit ?? 100, 200);
@@ -176,9 +190,9 @@ export class ChangesService {
         before: r.before,
         after: r.after,
         batchId: r.batchId,
-        ts: r.ts.getTime(),
+        ts: tsMillis(r.ts),
       })),
-      nextCursor: hasMore && last ? `${last.ts.getTime()}:${last.id}` : null,
+      nextCursor: hasMore && last ? `${tsMillis(last.ts)}:${last.id}` : null,
     };
   }
 
@@ -220,7 +234,7 @@ export class ChangesService {
       .where(
         and(
           eq(schema.changeEvents.tenantId, ctx.tenantId),
-          sql`${schema.changeEvents.nodeId} IN ${limited}`,
+          inArray(schema.changeEvents.nodeId, limited),
         ),
       )
       .groupBy(schema.changeEvents.nodeId, schema.changeEvents.mapId)

@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { NodeView } from './types';
 
 export interface ViewFilter {
-  ownerIds: string[];   // 为空表示不过滤
+  ownerIds: string[]; // 为空表示不过滤
   types: string[];
-  onlyMe: boolean;      // 快捷：只看我的
+  onlyMe: boolean; // 快捷：只看我的
 }
 
 const EMPTY: ViewFilter = { ownerIds: [], types: [], onlyMe: false };
@@ -12,8 +12,7 @@ const EMPTY: ViewFilter = { ownerIds: [], types: [], onlyMe: false };
 export function useViewFilter(myUserId: string) {
   const [filter, setFilter] = useState<ViewFilter>(EMPTY);
 
-  const isActive =
-    filter.onlyMe || filter.ownerIds.length > 0 || filter.types.length > 0;
+  const isActive = filter.onlyMe || filter.ownerIds.length > 0 || filter.types.length > 0;
 
   function reset() {
     setFilter(EMPTY);
@@ -57,7 +56,9 @@ export function useViewFilter(myUserId: string) {
 
     // 第一遍：标记所有命中节点
     const matched = new Set<string>();
-    nodes.forEach((n) => { if (matches(n)) matched.add(n.id); });
+    nodes.forEach((n) => {
+      if (matches(n)) matched.add(n.id);
+    });
 
     // 第二遍：对命中节点的所有祖先标记 path
     const pathNodes = new Set<string>();

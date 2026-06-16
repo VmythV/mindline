@@ -1,6 +1,6 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
-import { newId } from '@mindline/shared';
+import { newId, type ChangeOp } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
 import { ChangesService } from '../changes/changes.service';
@@ -61,6 +61,15 @@ export class CommentsService {
       body: dto.body,
       mentions: dto.mentions ?? null,
     });
+    await this.appendCommentChange({
+      ctx,
+      projectId,
+      mapId,
+      nodeId,
+      field: 'create',
+      before: null,
+      after: dto.body,
+    });
     return { id, body: dto.body, mentions: dto.mentions ?? null, resolved: false };
   }
 
@@ -70,6 +79,10 @@ export class CommentsService {
         authorId: schema.comments.authorId,
         tenantId: schema.comments.tenantId,
         projectId: schema.comments.projectId,
+        mapId: schema.comments.mapId,
+        nodeId: schema.comments.nodeId,
+        body: schema.comments.body,
+        resolved: schema.comments.resolved,
       })
       .from(schema.comments)
       .where(and(eq(schema.comments.id, id), eq(schema.comments.tenantId, ctx.tenantId)))
@@ -97,6 +110,28 @@ export class CommentsService {
     if (dto.body !== undefined) patch['body'] = dto.body;
     if (dto.resolved !== undefined) patch['resolved'] = dto.resolved;
     await this.db.update(schema.comments).set(patch).where(eq(schema.comments.id, id));
+    if (dto.body !== undefined && dto.body !== comment.body) {
+      await this.appendCommentChange({
+        ctx,
+        projectId: comment.projectId,
+        mapId: comment.mapId,
+        nodeId: comment.nodeId,
+        field: 'body',
+        before: comment.body,
+        after: dto.body,
+      });
+    }
+    if (dto.resolved !== undefined && dto.resolved !== comment.resolved) {
+      await this.appendCommentChange({
+        ctx,
+        projectId: comment.projectId,
+        mapId: comment.mapId,
+        nodeId: comment.nodeId,
+        field: 'resolved',
+        before: comment.resolved,
+        after: dto.resolved,
+      });
+    }
     return { id, ...patch };
   }
 
@@ -105,6 +140,9 @@ export class CommentsService {
       .select({
         authorId: schema.comments.authorId,
         projectId: schema.comments.projectId,
+        mapId: schema.comments.mapId,
+        nodeId: schema.comments.nodeId,
+        body: schema.comments.body,
       })
       .from(schema.comments)
       .where(and(eq(schema.comments.id, id), eq(schema.comments.tenantId, ctx.tenantId)))
@@ -128,5 +166,40 @@ export class CommentsService {
     }
 
     await this.db.delete(schema.comments).where(eq(schema.comments.id, id));
+    await this.appendCommentChange({
+      ctx,
+      projectId: comment.projectId,
+      mapId: comment.mapId,
+      nodeId: comment.nodeId,
+      field: 'delete',
+      before: comment.body,
+      after: null,
+    });
+  }
+
+  private async appendCommentChange(args: {
+    ctx: Ctx;
+    projectId: string;
+    mapId: string;
+    nodeId: string;
+    field: string;
+    before: unknown;
+    after: unknown;
+  }) {
+    await this.db.insert(schema.changeEvents).values({
+      id: newId('changeEvent'),
+      tenantId: args.ctx.tenantId,
+      projectId: args.projectId,
+      mapId: args.mapId,
+      nodeId: args.nodeId,
+      actorId: args.ctx.userId,
+      op: 'comment' as ChangeOp,
+      field: args.field,
+      before: args.before,
+      after: args.after,
+      batchId: null,
+      pathIds: null,
+      ts: new Date(),
+    });
   }
 }
