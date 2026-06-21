@@ -3,12 +3,12 @@
 > 依据 `思谱-需求文档.md`（PRD + 技术架构 v0.1）与 `detail/` 下 6 份详设生成。
 > 本版以**目标功能视角**重组：先对照核心功能交付现状，再列剩余工作。
 
-| 项 | 内容 |
-|----|------|
-| 版本 | v0.2 |
-| 更新日期 | 2026-06-21 |
+| 项       | 内容                                                                                                        |
+| -------- | ----------------------------------------------------------------------------------------------------------- |
+| 版本     | v0.2                                                                                                        |
+| 更新日期 | 2026-06-21                                                                                                  |
 | 调整说明 | 按目标功能清单重组；新增 CLI 模块；M6（硬权限/IM订阅/移动端）移出范围；工程化降级为「后续按需」；关闭过时项 |
-| 技术栈 | React+TS+Vite / NestJS / Hocuspocus+Yjs / Postgres+Redis+MinIO / 多模型 AI 网关 |
+| 技术栈   | React+TS+Vite / NestJS / Hocuspocus+Yjs / Postgres+Redis+MinIO / 多模型 AI 网关                             |
 
 **图例**：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成 · 📄 文档出处 · ⚠️ 需先拍板的风险点 · 🔗 依赖
 
@@ -16,26 +16,26 @@
 
 ## 一、核心功能交付现状（目标功能对照）
 
-| # | 目标功能 | 现状 | 落点 |
-|---|---|---|---|
-| 1 | 思维导图（2D 树编辑） | ✅ 完成 | M0.7 |
-| 2 | AI 拆解（关联父/子/兄弟节点） | ✅ 完成 | M2.2 / M2.3 |
-| 3 | 每个节点可存储信息 | ✅ 完成 | M0.4 |
-| 4 | 存储字段可自定义（Schema） | ✅ 完成 | M0.4 + M1.4 + M4 迁移 |
-| 5 | 变更记录 | ✅ 完成 | M0.6 ChangeEvent |
-| 6 | 时间轴展示变更 | ✅ 完成 | M1.2 |
-| 7 | 时间轴总结大事件 / 里程碑 | ✅ 完成 | M2.6（含 AI 建议） |
-| 8 | 新建/删除/变更/预览节点 | ✅ 完成 | M0.7 + M1.3 |
-| 9 | 快捷键 | ✅ 完成 | M0.7 + M1.3 |
-| 10 | 节点内容快速修改 | ✅ 完成 | M1.3 + Tiptap |
-| 11 | **3D 树** | ❌ 未做 | 见「剩余工作 · B」 |
-| 12 | 人员只看自己内容 + 保留层级 | ✅ 完成 | M3 视图过滤 + 软权限 |
-| 13 | 人员全局替换（离职移交） | 🟡 部分 | M3（Yjs 侧 ownerId 待补） |
-| 14 | 多人协作 | 🟡 基本完成 | M0.5 / M1.1（多实例 e2e 待验证） |
-| 15 | 父子项目 | ✅ 完成 | M4 |
-| 16 | 右键快捷方式 | ✅ 完成 | M1.3 |
-| 17 | 发布集成 IM（手动发送消息） | ✅ 完成 | M4 |
-| 18 | **CLI（配 SKILL 操作整个软件）** | ❌ 全新 | 见「剩余工作 · A」 |
+| #   | 目标功能                         | 现状        | 落点                             |
+| --- | -------------------------------- | ----------- | -------------------------------- |
+| 1   | 思维导图（2D 树编辑）            | ✅ 完成     | M0.7                             |
+| 2   | AI 拆解（关联父/子/兄弟节点）    | ✅ 完成     | M2.2 / M2.3                      |
+| 3   | 每个节点可存储信息               | ✅ 完成     | M0.4                             |
+| 4   | 存储字段可自定义（Schema）       | ✅ 完成     | M0.4 + M1.4 + M4 迁移            |
+| 5   | 变更记录                         | ✅ 完成     | M0.6 ChangeEvent                 |
+| 6   | 时间轴展示变更                   | ✅ 完成     | M1.2                             |
+| 7   | 时间轴总结大事件 / 里程碑        | ✅ 完成     | M2.6（含 AI 建议）               |
+| 8   | 新建/删除/变更/预览节点          | ✅ 完成     | M0.7 + M1.3                      |
+| 9   | 快捷键                           | ✅ 完成     | M0.7 + M1.3                      |
+| 10  | 节点内容快速修改                 | ✅ 完成     | M1.3 + Tiptap                    |
+| 11  | **3D 树**                        | ❌ 未做     | 见「剩余工作 · B」               |
+| 12  | 人员只看自己内容 + 保留层级      | ✅ 完成     | M3 视图过滤 + 软权限             |
+| 13  | 人员全局替换（离职移交）         | 🟡 部分     | M3（Yjs 侧 ownerId 待补）        |
+| 14  | 多人协作                         | 🟡 基本完成 | M0.5 / M1.1（多实例 e2e 待验证） |
+| 15  | 父子项目                         | ✅ 完成     | M4                               |
+| 16  | 右键快捷方式                     | ✅ 完成     | M1.3                             |
+| 17  | 发布集成 IM（手动发送消息）      | ✅ 完成     | M4                               |
+| 18  | **CLI（配 SKILL 操作整个软件）** | ❌ 全新     | 见「剩余工作 · A」               |
 
 ---
 
@@ -46,21 +46,25 @@
 > 定位：用户安装该 CLI 后，配置为 AI 的 SKILL，AI 即可通过它对思谱整个软件进行操作（建项目/增删改节点/跑 AI 拆解/查时间轴/发布 IM 等）。
 > 设计原则：**对 agent 友好**——命令可组合、输出结构化（JSON）、错误码与 `@mindline/shared` 对齐、薄封装现有 `/api` REST + SSE，不另起业务逻辑。
 
-- [ ] 新建 `apps/cli`（Node 22 + 复用 `@mindline/shared` 契约；调用 `apps/api` 的 `/api` 接口）
-- [ ] 鉴权：`mindline login`（token 登录）+ 本地凭证安全存储；自动刷新
-- [ ] 输出协议：默认人类可读，`--json` 输出结构化结果（供 AI 解析）
-- [ ] 核心命令骨架：
-  - [ ] `project` / `map`：列表、创建、父子项目
-  - [ ] `node`：create / rename / set-field / move / delete / get（树或单点）
-  - [ ] `ai decompose`：对指定节点跑拆解（消费 SSE，聚合为提案 → 可 `--apply` 写回）
-  - [ ] `ai summarize`：子树摘要
-  - [ ] `timeline` / `changes`：查变更与时间轴（支持过滤）
-  - [ ] `im publish`：发布卡片到已配置 IM 渠道
-- [ ] SKILL 集成包：随 CLI 附带可直接挂载的 skill 描述（命令清单 + 用法示例），让 AI 即装即用
-- [ ] 文档：安装、配置、SKILL 接入指引
+**路线 1（已交付）· 只读查询 + 非协同 REST 写 + AI 结果展示**
 
-> ⚠️ 待细化：CLI 写节点是否经协同（Y.Doc）？当前协同写入口在前端命令层（约定②），服务端无法直接写 Y.Doc。
-> CLI 写节点需新增「服务端可写协同文档」的通道（如 collab 侧提供受控写 API），或先支持只读+非协同字段操作，结构变更后置。**此为 CLI 模块最大技术决策点。**
+- [x] 新建 `apps/cli`（Node 22 + tsup 打包 + bin `mindline` + 复用 `@mindline/shared`；薄封装 `/api`）
+- [x] 鉴权：`login` / `logout` / `whoami`；凭证存 `~/.mindline/config.json`（0600）+ 401 自动刷新；`--token`/`--api` 覆盖
+- [x] 输出协议：默认人类可读，`--json` 输出 `{ok,data}` / `{ok,error}`（错误码与 shared 对齐）+ 非零退出码
+- [x] `project`：list（含 mapId）/ get / create（含父子项目）
+- [x] `node`：tree（快照树形）/ get（单节点含自定义字段）——**只读**
+- [x] `ai decompose`：SSE 跑拆解，输出子节点提案（展示，不写回）
+- [x] `ai summarize`：SSE 子树摘要
+- [x] `timeline` / `history`：变更时间轴 + 节点字段级历史（支持人/操作/分支/时间过滤）
+- [x] `im channels` / `im publish`：列渠道 + 发布卡片
+- [x] SKILL 集成包 `apps/cli/SKILL.md`（命令速查 + 典型流程，可直接挂载）+ README
+
+**路线 2（待续）· 节点协同写入 + 提案写回**
+
+- [ ] ⚠️ **核心技术决策**：CLI 写节点需经协同文档（Y.Doc，约定②），服务端无法直接写。
+      需新增「服务端/collab 受控写通道」或离线写后协调合并。
+- [ ] `node create / rename / set-field / move / delete`（依赖上面的写通道）
+- [ ] `ai decompose --apply`：确认后写回协同文档（产出 `aiGenerate` 事件）
 
 ### B · 3D 树（只读总览）
 
@@ -112,6 +116,7 @@
 > 简明记录，便于回溯；实现细节见代码与 git 历史。
 
 ### 阶段0 · 启动准备
+
 - [x] monorepo（pnpm workspace + Turborepo）：web / api / collab + shared / db / infra
 - [x] TS 严格模式 base 配置、ESLint + Prettier
 - [x] 命令层 ESLint 规则（禁止 `map/**` 外 import yjs）
@@ -119,6 +124,7 @@
 - [x] Drizzle ORM + drizzle-kit 迁移；共享契约（domain/ids/errors）
 
 ### M0 · 地基
+
 - [x] 核心 DDL + 多租户 tenant_id scope（ALS 上下文中间件）
 - [x] 认证：register/login/refresh/me；JWT + 全局 JwtGuard + @Public
 - [x] 项目 CRUD（含父子）+ 成员角色（owner/admin/editor/commenter/viewer）+ 建项目自动建 map
@@ -129,12 +135,14 @@
 - [x] 撤销重做（Y.UndoManager + 补偿 ChangeEvent）
 
 ### M1 · 协同与历史
+
 - [x] Awareness 在线协作（光标/选区/编辑徽标/在线头像/心跳清除）
 - [x] 变更历史 + 项目时间轴（batchId 折叠/过滤：人/操作/分支/时间）+ 节点字段级 diff
 - [x] 交互体系：命令面板 Cmd+K / 搜索 Cmd+F / 右键菜单 / Space 预览
 - [x] 自定义字段表单完善（PUT node-types 升版 + 类型切换保旧值）
 
 ### M2 · AI 首发
+
 - [x] AI 模型网关（OpenAI 兼容 + 多租户凭证 AES-256-GCM + 路由 + 计量 + stub 降级）
 - [x] Context Builder（target/ancestors/siblings/children/schema + token 预算裁剪）
 - [x] decompose SSE + 三层校验流水线 → 统一 Proposal
@@ -142,12 +150,14 @@
 - [x] summarize SSE（子树摘要）+ 里程碑 CRUD + AI 建议里程碑 + 时间轴叠加
 
 ### M3 · 权限与人员
+
 - [x] 软权限（节点/分支 private + 骨架灰条）+ 视图过滤（只看我的）
 - [x] 角色权限矩阵 `GET /projects/:id/permissions`
 - [x] 人员全局替换（transfer_jobs：preview/execute/查询，DB 席位）
 - [x] 评论 & @（comments 表 + NodeInspector 面板）
 
 ### M4 · 拓展
+
 - [x] IM 渠道 + 手动发布（企微/钉钉/飞书/Slack/Webhook）
 - [x] 父子项目树 + 跨项目镜像引用
 - [x] AI converse / complete / rewrite（SSE 统一提案）
@@ -155,4 +165,4 @@
 
 ---
 
-*（TODOLIST 结束。完成项请勾选；范围/排期调整请同步更新本文件。）*
+_（TODOLIST 结束。完成项请勾选；范围/排期调整请同步更新本文件。）_
