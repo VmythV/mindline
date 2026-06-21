@@ -1,262 +1,157 @@
 # 思谱 Mindline · 开发 TODOLIST
 
 > 依据 `思谱-需求文档.md`（PRD + 技术架构 v0.1）与 `detail/` 下 6 份详设生成。
-> 范围：全量 M0–M6（M0–M2 任务级，M3–M6 中粒度）+ 阶段0 启动准备。
+> 本版以**目标功能视角**重组：先对照核心功能交付现状，再列剩余工作。
 
 | 项 | 内容 |
 |----|------|
-| 版本 | v0.1 |
-| 生成日期 | 2026-05-30 |
-| MVP 范围 | M0–M2（协同思维导图 + AI 拆解 + 时间轴/里程碑 的最小价值闭环） |
+| 版本 | v0.2 |
+| 更新日期 | 2026-06-21 |
+| 调整说明 | 按目标功能清单重组；新增 CLI 模块；M6（硬权限/IM订阅/移动端）移出范围；工程化降级为「后续按需」；关闭过时项 |
 | 技术栈 | React+TS+Vite / NestJS / Hocuspocus+Yjs / Postgres+Redis+MinIO / 多模型 AI 网关 |
 
 **图例**：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成 · 📄 文档出处 · ⚠️ 需先拍板的风险点 · 🔗 依赖
 
 ---
 
-## ⭐ 开工前待你拍板清单（汇总）
+## 一、核心功能交付现状（目标功能对照）
 
-> 这些决策会影响下方任务的实现方式，建议在进入对应里程碑前确认。详见各条出处。
-
-- [~] **D1 · ChangeEvent 落库可靠性** ⚠️：✅ 已加**客户端持久重试队列 + 幂等插入**（`changeQueue.ts`：内存+localStorage 双写、指数退避、重连/重载冲刷；服务端按 `eventId` onConflictDoNothing 去重）→ 覆盖抖动/短断线/刷新/关页。残留：浏览器硬崩溃未落盘的极窄窗口；collab 服务端语义反推兜底仍待后续。 📄 Yjs §4.3 / §10
-- [x] **D2 · path_ids 维护策略**：✅ 已定「记录事件发生时的祖先链」（落库冗余、不随移动回改；branch 过滤走 ix_changes_path GIN）。 📄 数据模型 §7、API §12
-- [x] **D3 · ID 生成**：✅ ULID + 前缀，应用层 `newId()` 生成，不做 DB 兜底。 📄 数据模型 §7
-- [x] **D4 · 配置加密方案**：✅ 已定 AES-256-GCM + env 主密钥（`AI_CONFIG_SECRET`）；DB 仅存密文，仅加密 apiKey。 📄 数据模型 §7
-- [ ] **D5 · 是否先做 M0a Walking Skeleton**：单租户最小端到端链路先打通再铺开（强烈建议）。
-- [x] **D6 · monorepo 工具确认**：✅ 已采用 pnpm workspace + Turborepo。
-- [x] **D7 · DB 迁移工具选型**：✅ 已选 Drizzle ORM + drizzle-kit。
-- [x] **D8 · AI 网关形态**：✅ 已定「自研薄适配层」（OpenAI 兼容；最小闭环 env 单网关 + stub 降级）。 📄 主文档 §5.2 / AI §1
-
----
-
-## 阶段0 · 项目启动准备
-
-### 0.1 工程脚手架
-- [x] 初始化 monorepo：`apps/web`(前端) `apps/api`(NestJS) `apps/collab`(Hocuspocus) `packages/shared`(共享类型/契约) 🔗 D6
-- [x] TypeScript 基础配置（tsconfig base、路径别名、严格模式）
-- [x] ESLint + Prettier 统一规范
-- [~] **自定义 ESLint 规则 + CI 静态检查：禁止业务层直接 import yjs 写类型（强制走命令层）** ⚠️ 📄 Yjs §11
-  - ✅ ESLint 规则已启用（`eslint.config.mjs`：`apps/web/src/**` 除 `map/**` 外禁止 `import 'yjs'`，违规报中文提示；全仓 lint 通过、探针验证可拦截）
-  - [ ] CI 静态检查接入（待 0.3 CI 流水线）
-- [~] 测试框架（Vitest）+ 提交规范（husky/lint-staged，可选）
-  - ✅ Vitest 接入（api / shared，根 `pnpm test` 经 turbo 编排；详见「贯穿性事项·测试」）
-  - [ ] husky/lint-staged 提交规范（可选，未做）
-
-### 0.2 本地基础设施
-- [x] Docker Compose：Postgres 14+ / Redis / MinIO（+ 可选 AI 网关）一键拉起 📄 主文档 §5.2
-- [ ] 环境变量管理与校验（.env schema）
-- [ ] DB 迁移工具接入 + 执行 DDL 📄 数据模型 §3、建表顺序 §5 🔗 D7
-
-### 0.3 CI/CD
-- [ ] CI 流水线：lint + typecheck + test + build + 命令层绕过拦截检查
-- [ ] 镜像构建（web/api/collab 各一）
-- [ ] 部署骨架（Compose 优先；K8s Helm 可后置到 M5，SaaS 与私有同套）
-
-### 0.4 共享契约（packages/shared）
-- [x] TS 类型：Node / ChangeEvent / Proposal / 错误码枚举 / ID 前缀规范 📄 API §1.4/§1.6/§11
-- [ ] 命令层接口契约：Command 类型、ChangeEvent.op 枚举 📄 Yjs §4.1
-- [x] 统一错误模型与 HTTP/WS 错误码 📄 API §1.3/§1.4
+| # | 目标功能 | 现状 | 落点 |
+|---|---|---|---|
+| 1 | 思维导图（2D 树编辑） | ✅ 完成 | M0.7 |
+| 2 | AI 拆解（关联父/子/兄弟节点） | ✅ 完成 | M2.2 / M2.3 |
+| 3 | 每个节点可存储信息 | ✅ 完成 | M0.4 |
+| 4 | 存储字段可自定义（Schema） | ✅ 完成 | M0.4 + M1.4 + M4 迁移 |
+| 5 | 变更记录 | ✅ 完成 | M0.6 ChangeEvent |
+| 6 | 时间轴展示变更 | ✅ 完成 | M1.2 |
+| 7 | 时间轴总结大事件 / 里程碑 | ✅ 完成 | M2.6（含 AI 建议） |
+| 8 | 新建/删除/变更/预览节点 | ✅ 完成 | M0.7 + M1.3 |
+| 9 | 快捷键 | ✅ 完成 | M0.7 + M1.3 |
+| 10 | 节点内容快速修改 | ✅ 完成 | M1.3 + Tiptap |
+| 11 | **3D 树** | ❌ 未做 | 见「剩余工作 · B」 |
+| 12 | 人员只看自己内容 + 保留层级 | ✅ 完成 | M3 视图过滤 + 软权限 |
+| 13 | 人员全局替换（离职移交） | 🟡 部分 | M3（Yjs 侧 ownerId 待补） |
+| 14 | 多人协作 | 🟡 基本完成 | M0.5 / M1.1（多实例 e2e 待验证） |
+| 15 | 父子项目 | ✅ 完成 | M4 |
+| 16 | 右键快捷方式 | ✅ 完成 | M1.3 |
+| 17 | 发布集成 IM（手动发送消息） | ✅ 完成 | M4 |
+| 18 | **CLI（配 SKILL 操作整个软件）** | ❌ 全新 | 见「剩余工作 · A」 |
 
 ---
 
-## M0 · 地基
+## 二、剩余工作
 
-> 交付：账号/租户/项目/成员角色 · Schema 类型系统 · Yjs+Hocuspocus 协同跑通 · 2D 树编辑 · 命令层+ChangeEvent 落库
-> 验收：两人实时编辑同一树不丢操作（<500ms）；删子树 Cmd+Z 完整恢复；变更入库；1000 节点 ≥30FPS
+### A · CLI（新增 · 面向 AI agent 的操作入口）🔥
 
-### M0a · Walking Skeleton（建议先行）🔗 D5
-- [ ] 单租户最小登录（JWT 签发/校验）
-- [ ] 建一个 project + 关联 map（1:1）
-- [ ] 前端 React Flow 渲染一棵静态树
-- [ ] Hocuspocus 连接，两端同步一个节点变更
-- [ ] 一条 ChangeEvent 成功落 `change_events`
+> 定位：用户安装该 CLI 后，配置为 AI 的 SKILL，AI 即可通过它对思谱整个软件进行操作（建项目/增删改节点/跑 AI 拆解/查时间轴/发布 IM 等）。
+> 设计原则：**对 agent 友好**——命令可组合、输出结构化（JSON）、错误码与 `@mindline/shared` 对齐、薄封装现有 `/api` REST + SSE，不另起业务逻辑。
 
-### M0.1 数据层
-- [x] 执行核心 DDL（按依赖顺序）：tenants/users/workspaces/projects/maps/project_members/node_type_schemas(+versions)/yjs_updates/yjs_snapshots/change_events 📄 数据模型 §3、§5
-- [x] 多租户隔离：应用层强制 `tenant_id` scope（✅ ALS 租户上下文中间件 + `getTenantId()` 权威来源 + 成员/时间轴/AI 建议查询纵深补 scope；可选 PG RLS 后续）📄 数据模型 §6
+- [ ] 新建 `apps/cli`（Node 22 + 复用 `@mindline/shared` 契约；调用 `apps/api` 的 `/api` 接口）
+- [ ] 鉴权：`mindline login`（token 登录）+ 本地凭证安全存储；自动刷新
+- [ ] 输出协议：默认人类可读，`--json` 输出结构化结果（供 AI 解析）
+- [ ] 核心命令骨架：
+  - [ ] `project` / `map`：列表、创建、父子项目
+  - [ ] `node`：create / rename / set-field / move / delete / get（树或单点）
+  - [ ] `ai decompose`：对指定节点跑拆解（消费 SSE，聚合为提案 → 可 `--apply` 写回）
+  - [ ] `ai summarize`：子树摘要
+  - [ ] `timeline` / `changes`：查变更与时间轴（支持过滤）
+  - [ ] `im publish`：发布卡片到已配置 IM 渠道
+- [ ] SKILL 集成包：随 CLI 附带可直接挂载的 skill 描述（命令清单 + 用法示例），让 AI 即装即用
+- [ ] 文档：安装、配置、SKILL 接入指引
 
-### M0.2 认证与租户
-- [x] `POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`GET /me` 📄 API §3
-- [x] JWT 含 sub/tenantId/type(access·refresh)/exp；刷新令牌机制（bcryptjs 哈希；users 加 password_hash）
-- [x] 全局 JwtGuard + `@Public()`；统一错误体过滤器；ValidationPipe；tenantId 从 JWT 注入（不接受 body 覆盖） 📄 API §1.2
-- [x] 租户上下文中间件 + 应用层 `tenant_id` scope 强制（✅ `TenantContextMiddleware` 经 AsyncLocalStorage 建立请求级上下文，`JwtAuthGuard` 写入，业务查询经 `getTenantId()` 取权威 tenantId；漏 scope 即抛错而非裸查）
+> ⚠️ 待细化：CLI 写节点是否经协同（Y.Doc）？当前协同写入口在前端命令层（约定②），服务端无法直接写 Y.Doc。
+> CLI 写节点需新增「服务端可写协同文档」的通道（如 collab 侧提供受控写 API），或先支持只读+非协同字段操作，结构变更后置。**此为 CLI 模块最大技术决策点。**
 
-### M0.3 项目与成员
-- [x] 项目 CRUD `/projects`（含 parentId 父子嵌套）📄 API §4
-- [x] 成员管理 `/projects/:id/members`；角色枚举 owner/admin/editor/commenter/viewer（声明式 @MinRole + ProjectRoleGuard）
-- [x] 创建项目时自动建 map（1:1，project.mapId 由 join 得到）📄 数据模型 §3.2
+### B · 3D 树（只读总览）
 
-### M0.4 节点类型 Schema 系统
-- [x] `GET/POST /projects/:id/node-types`；definition 结构校验（typeKey 规范、规范化合并） 📄 API §5、主文档 §3.3
-- [x] 字段类型支持：text/richtext/number/date/datetime/enum/multiEnum/user/link/checkbox/tags（FieldType 已定义于 @mindline/shared）
-- [x] 内置开箱模板：idea/task/objective/keyResult/knowledge/requirement/bug（注册租户自动 seed） 📄 主文档 附录A
-- [x] 节点详情面板：按 Schema 动态渲染表单（enum→下拉、date→日期、richtext→协同编辑器、user→人员选择…）
+- [ ] 3D 总览（react-three-fiber，只读）：径向球面 / 分层悬浮布局 📄 主文档 F10
+- [ ] 实例化渲染 + LOD + 视锥剔除（目标 5000 节点 ≥30FPS）
+- [ ] 点击节点下钻定位回 2D
+- [ ] 大图性能配套：子树懒加载、正文延迟同步（骨架先到）📄 Yjs §8
 
-### M0.5 Yjs 协同内核（apps/collab）
-- [x] Y.Doc 结构：nodes 扁平 Map（parentId+order+title+data…）+ meta（title 暂 string，Y.Text 后续）📄 Yjs §2
-- [x] 分数索引排序（fractional-indexing；同位冲突以 nodeId 二级兜底）📄 Yjs §3
-- [x] `onAuthenticate`：JWT + 项目成员资格 + map 读/写权（e2e 验证）📄 Yjs §7
-- [x] `onLoadDocument`：最近快照重建（增量 update 优化后续）
-- [x] `onStoreDocument`：防抖落 `yjs_snapshots`（snapshot-only；增量 + 压实后续）
-- [~] Redis pub/sub 多实例广播；WS 关闭码 4401/4403/4404/1011（✅ `@hocuspocus/extension-redis`，`COLLAB_REDIS_URL` 设置时启用跨实例广播 update+awareness，留空单实例；createClient 工厂自建 pub/sub 连接附 error 监听 + 退避重连，避免 Redis 不可用刷屏；onAuthenticate 失败按场景抛带 code 的 CloseError → 4401 无效 token / 4404 map 不存在·跨租户 / 4403 非成员 / 1011 服务端错误。已真实验证：typecheck+lint、单实例+Redis 两条启动路径 listen、Redis 不可用时不刷屏。**待 infra：真正的多实例广播 + 持久化 e2e（`scripts/e2e.mjs` 需 Postgres）**）
-- [x] 前端 children 派生索引（监听 nodes 增量更新，不双写 children）📄 Yjs §2
+### C · 补齐已有功能的尾巴
 
-### M0.6 命令层（packages/shared + web）
-- [x] `MapRepository` 封装唯一写入口（对外仅暴露命令 API）📄 Yjs §11
-- [x] 命令：CreateNode/RenameNode/DeleteSubtree/MoveNode/SetField（setOwner/setType 待补）📄 Yjs §4.1
-- [x] 每条命令：单 `transact`（带 origin）改文档 + 显式产出 ChangeEvent
-- [x] 批量命令共享 batchId（删子树）
-- [x] ChangeEvent 落库 `POST /maps/:mapId/changes`（发起方持久重试队列 + 服务端 eventId 幂等去重；collab 语义反推兜底待后续）🔗 D1 📄 API §6
-
-### M0.7 2D 树编辑（web · React Flow）
-- [x] 自定义节点渲染 + 自动布局（简单层级树；左右展开/径向/手动微调待完善）
-- [x] 视口虚拟化（✅ React Flow v12 `onlyRenderVisibleElements`：仅挂载视口内+缓冲区节点 DOM；typecheck/lint 通过，1000 节点 FPS 待你在浏览器验收）
-- [x] 快捷键：Tab/Enter/Delete/方向键导航/Cmd+.（折叠子树）/F2/Space/Cmd+Z 📄 主文档 附录B（注：Shift+Enter 属节点内换行，归富文本编辑器）
-- [x] 拖拽改父（就近改父，禁止移入自身子树；改排序待细化）
-- [x] 轻富文本节点正文（Tiptap，节点详情侧栏 B/I/列表/代码块；字符级协同 y-prosemirror 后续）📄 主文档 A3
-
-### M0.8 撤销重做（A9）
-- [x] `Y.UndoManager`（trackedOrigins=本地 origin，captureTimeout=500，仅撤自己）📄 Yjs §5
-- [x] 撤销/重做产出补偿 ChangeEvent（前后快照 diff 反推 create/delete/rename/move/setField，整次归一 batchId）；复合命令 `stopCapturing()` 待细化
+- [ ] **人员替换 · Yjs 侧**：节点 ownerId 在 Y.Doc 内一并替换（当前仅替换 DB project_members 席位）📄 权限 §6
+- [ ] **多实例协作验证**：真·多实例 Redis 广播 + 持久化 e2e（`scripts/e2e.mjs` 需 Postgres）📄 Yjs §10
+- [ ] **D1 落库可靠性收尾**：collab 服务端语义反推兜底（覆盖浏览器硬崩溃极窄窗口）📄 Yjs §4.3
+- [ ] **AI 增强**（M2 尾巴，非必需）：
+  - [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}` 📄 AI §11
+  - [ ] depth>1 多层拆解（当前固定 depth=1）
+  - [ ] 模型级流式 partial（当前为聚合后逐 op 推送）
+  - [ ] range 时间区间摘要（当前仅 nodeId 子树）
 
 ---
 
-## M1 · 协同与历史
+## 三、后续按需（暂缓 · 不在当前范围）
 
-> 交付：Awareness 在线协作 · 节点历史+项目时间轴 · 预览/右键/命令面板 · 自定义字段表单
-> 验收：字段级历史可查；时间轴可过滤；一次 AI 拆解折叠为 1 条批量事件
+> 不影响功能闭环，等上线/规模化需要时再启动。
 
-### M1.1 Awareness 在线协作
-- [x] 广播临时状态 user/cursor(nodeId+field+selection)/editingNodeId 📄 Yjs §6
-- [x] 渲染他人光标/选区彩色 + 「正在编辑」徽标 + 在线头像列表
-- [x] 断线心跳超时自动清除
-
-### M1.2 变更历史与时间轴
-- [x] `GET /maps/:mapId/changes`（actor/op/field/batchId/branch/from/to/cursor/limit）📄 API §6
-- [x] `GET /nodes/:nodeId/history`（单节点字段级历史）
-- [x] `GET /maps/:mapId/snapshot`（只读快照，导出/3D/搜索/AI 上下文用）
-- [x] 项目级时间轴 UI：横向流，同 batchId 折叠为批量事件（可展开）
-- [x] 节点历史侧栏（倒序字段级 diff：谁/何时/A→B）
-- [x] 过滤：人 / 操作类型 / 分支(子树) / 时间范围
-- [x] path_ids 落库 + branch 过滤实现 🔗 D2 📄 数据模型 §4
-
-### M1.3 交互体系
-- [x] 快捷键完整清单（Tab/Enter/Delete/方向键/Cmd+./F2/Space/Cmd+K/Cmd+F/Cmd+Z；`/` 召唤 AI 待补）📄 主文档 附录B
-- [x] 右键上下文菜单 📄 主文档 附录C
-- [x] `Space` 节点预览卡片（只读速览）
-- [x] `Cmd+K` 命令面板（模糊搜索并执行主要命令）
-- [x] `Cmd+F` 搜索节点
-
-### M1.4 自定义字段表单完善
-- [x] `PUT /node-types/:id`：升 version；破坏性变更（删/改字段）提示建议生成迁移 📄 API §5
-- [x] 切换节点类型按 A10 处理旧字段（保留旧值 + 标记废弃）📄 主文档 §3.3
+- [ ] **工程化 / CI-CD**：CI 流水线（lint+typecheck+test+build+命令层拦截检查）、镜像构建（web/api/collab/cli）、部署骨架
+- [ ] **测试补全**：web 命令层（MapRepository diff 反推）/ 集成 / E2E / AI 降级 / 迁移回滚 / 人员替换幂等
+- [ ] **私有化部署整包**：Docker Compose / K8s Helm 全自托管 📄 主文档 §5.7
+- [ ] **可观测性**：日志/指标/链路；AI 请求日志验证含父链+兄弟标题 📄 AI §9
+- [ ] **安全梳理**：TLS、附件签名 URL、配置加密复核、审计 📄 主文档 §6
+- [ ] **国际化**：文案外置，预留多语言
+- [ ] **.env schema 校验**、SSE 反代禁缓冲（`X-Accel-Buffering: no`）
+- [ ] **文档单一事实来源同步**：表结构/契约变更回写主文档 / 数据模型 / API 契约
 
 ---
 
-## M2 · AI 首发
+## 四、已移出范围
 
-> 交付：模型网关 + 生成子树 + diff 预览 · 人工里程碑 + AI 辅助建议/摘要
-> 验收：拆解结果经预览方写入（未确认不入文档/不参与协同）；里程碑可标记；AI 摘要为可编辑初稿
->
-> 🔶 **M2 全部交付**（M2.1–M2.6）：自研薄适配层 + 多租户凭证（AES-256-GCM）/路由/计量、Context Builder、`decompose` SSE + 虚影 diff 预览、`summarize` SSE、里程碑 CRUD + AI 建议/摘要、stub 降级。待续（非 MVP 必需）：能力探测、depth>1、range 时间区间摘要、画布里程碑标记。
+> 经评审本阶段不做（如需恢复请重新纳入）。
 
-### M2.1 AI 模型网关
-- [x] 多模型适配（OpenAI 兼容；租户可配多 provider/endpoint/model）🔗 D8 📄 AI §1
-- [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}`（后续）📄 AI §11
-- [x] 凭证路由：按租户取启用配置（默认优先）→ 解密调用；无则回退 env→stub 📄 AI §8、主文档 A6
-- [x] `ai_provider_configs` / `ai_usage` 表 + tokens 计量 + AES-256-GCM 加密 + `/ai/providers` CRUD + `/ai/usage` 📄 数据模型 §3.8
-- [x] 错误与降级：functionCall→jsonMode（换模型提示后续）
-
-### M2.2 上下文组装 + 提示词
-- [x] Context Builder：target/ancestors/siblings/children/targetSchema/userPrompt（从只读快照）📄 AI §2
-- [x] token 预算裁剪策略（优先级 + 兄弟/父链截断）📄 AI §2.2
-- [x] system+user 模板 + `emit_subtree` 函数定义 📄 AI §3
-
-### M2.3 生成子树 decompose（SSE）
-- [x] `POST /ai/decompose`（SSE：meta/op/done/error；role≥Editor）📄 API §7、AI §13
-- [x] 校验流水线：协议校验(失败重试1次)→Schema校验(逐节点)→业务约束(数量/查重)📄 AI §5
-- [x] 规整为统一 Proposal（ops/valid/issues/modelMeta）📄 AI §4
-- [~] 中断（透传 abort）+ 超时（总60s）✓；流式 partial 为「聚合后逐 op 推送」（模型级流式 partial 后续）📄 AI §6
-- [~] maxChildren≤20 ✓；depth 最小闭环固定 1（depth>1 后续）📄 AI §11
-
-### M2.4 diff 预览（前端）
-- [x] 虚影节点渲染（半透明虚线 + ✓/✗ 角标）；单个/全部 接受·拒绝·就地编辑标题 📄 AI §7
-- [x] 确认 → 命令层 ApplyProposal（同 batchId）→ Yjs 写入 + `aiGenerate` 事件
-- [x] **未确认不进 Y.Doc、不参与协同同步**（本地 UI 态）
-- [x] ~~`POST /ai/proposals/:proposalId/apply`~~ **不做（与约定②+API契约 §7.1 冲突）**：提案应用由前端命令层完成（写 Y.Doc + `aiGenerate` 事件落 `change_events` 即审计）；服务端写不了协同文档、且提案不落库（无 `proposals` 表）无法按 id 重建 ops。已对齐 AI拆解详设 §7。📄 API §7
-
-### M2.5 摘要 summarize（SSE）
-- [x] `POST /ai/summarize`（scope=nodeId 子树；分块 delta；NodeInspector 可编辑初稿→填入正文）；range 时间区间后续 📄 API §7
-
-### M2.6 里程碑（人工 + AI 辅助）
-- [x] `milestones` 表 + CRUD（GET/POST/PATCH/DELETE；PATCH/DELETE 反查鉴权）📄 API §8、数据模型 §3.6
-- [x] 手动标记：名称+说明+锚定节点+关联时间区间
-- [x] `POST /projects/:id/milestones/ai-suggest`：扫描区间变更聚合 → 建议里程碑 + 摘要初稿（复用网关/计量）
-- [x] 时间轴叠加里程碑标记（TimelinePanel 顶部，点击展开 + 编辑 aiSummary）
+- ~~M6 · 硬权限隔离（内容子文档拆分）~~
+- ~~M6 · IM 订阅自动推送（订阅引擎 + 规则触发）~~
+- ~~M6 · 移动端适配深化~~
 
 ---
 
-## M3 · 权限与人员（中粒度）
+## 五、已交付里程碑存档（M0–M4）
 
-> 验收：「只看某人」骨架完整；人员替换不篡改历史
+> 简明记录，便于回溯；实现细节见代码与 git 历史。
 
-- [x] **软权限**：节点/分支 `private`；effectivePrivate 继承；骨架灰条呈现；私有声明确认弹窗 📄 权限 §3（首版：setPrivate 命令 + NodeCard 骨架渲染 + NodeInspector 切换开关；服务端全量下发——软隔离）
-- [x] **视图过滤层**：按负责人（只看我的）；未命中折叠为路径骨架、保留层级；一键 看全部⇄只看某人（纯本地）📄 权限 §4（useViewFilter hook + MapCanvas 过滤工具栏；类型/时间维度可后续扩展）
-- [x] **角色权限矩阵落地**：`GET /projects/:id/permissions`（返回 role + can.* 能力集）；PATCH 成员角色已有 MinRole guard 📄 权限 §2/§7/§11
-- [x] **人员全局替换**：`transfer_jobs` 表；`POST /transfer/preview`、`POST /transfer/execute`、`GET /transfer/:jobId`；替换 project_members 席位；历史 actor 不变 📄 权限 §6、API §9（节点 ownerId 在 Yjs，DB 侧仅替换成员席位；Yjs 侧替换待后续）
-- [x] **评论 & @**：`comments` 表；`GET/POST /maps/:mapId/nodes/:nodeId/comments`；`PATCH/DELETE /comments/:id`；NodeInspector 评论面板（发送/解决/查看）📄 数据模型 §3.7（@ 通知待 IM 模块 M4）
+### 阶段0 · 启动准备
+- [x] monorepo（pnpm workspace + Turborepo）：web / api / collab + shared / db / infra
+- [x] TS 严格模式 base 配置、ESLint + Prettier
+- [x] 命令层 ESLint 规则（禁止 `map/**` 外 import yjs）
+- [x] Vitest 接入（api / shared）；Docker Compose（PG/Redis/MinIO）
+- [x] Drizzle ORM + drizzle-kit 迁移；共享契约（domain/ids/errors）
 
----
+### M0 · 地基
+- [x] 核心 DDL + 多租户 tenant_id scope（ALS 上下文中间件）
+- [x] 认证：register/login/refresh/me；JWT + 全局 JwtGuard + @Public
+- [x] 项目 CRUD（含父子）+ 成员角色（owner/admin/editor/commenter/viewer）+ 建项目自动建 map
+- [x] 节点类型 Schema 系统：11 种字段类型 + 7 个内置模板 + 动态表单
+- [x] Yjs 协同内核：扁平 nodes Map + 分数索引 + onAuthenticate/onLoad/onStore + Redis 多实例广播
+- [x] 命令层 MapRepository（唯一写入口）+ ChangeEvent 持久重试队列落库
+- [x] 2D 树编辑：React Flow + 视口虚拟化 + 快捷键 + 拖拽改父 + Tiptap 富文本
+- [x] 撤销重做（Y.UndoManager + 补偿 ChangeEvent）
 
-## M4 · 拓展（中粒度）
+### M1 · 协同与历史
+- [x] Awareness 在线协作（光标/选区/编辑徽标/在线头像/心跳清除）
+- [x] 变更历史 + 项目时间轴（batchId 折叠/过滤：人/操作/分支/时间）+ 节点字段级 diff
+- [x] 交互体系：命令面板 Cmd+K / 搜索 Cmd+F / 右键菜单 / Space 预览
+- [x] 自定义字段表单完善（PUT node-types 升版 + 类型切换保旧值）
 
-> 验收：手动发布送达 IM；子项目可下钻；Schema 变更可批量迁移并回滚
+### M2 · AI 首发
+- [x] AI 模型网关（OpenAI 兼容 + 多租户凭证 AES-256-GCM + 路由 + 计量 + stub 降级）
+- [x] Context Builder（target/ancestors/siblings/children/schema + token 预算裁剪）
+- [x] decompose SSE + 三层校验流水线 → 统一 Proposal
+- [x] diff 虚影预览（前端本地态，确认走命令层 applyProposal 写回）
+- [x] summarize SSE（子树摘要）+ 里程碑 CRUD + AI 建议里程碑 + 时间轴叠加
 
-- [x] **IM 渠道与手动发布**：`im_channels` 表；GET/POST/DELETE 渠道（config 加密）；`POST /im/publish`（node/milestone/summary 卡片）；适配 企微/钉钉/飞书/Slack/Webhook 📄 API §10、数据模型 §3.10
-- [x] **父子项目 & 跨项目引用**：项目树（ProjectsPage 树形展开/折叠 + 子项目新建）；跨项目镜像引用（NodeLinksPanel + addLink/removeLink + POST /nodes/resolve 标题回显）📄 主文档 F9
-- [x] **AI 对话式 converse / 补全查重 complete / 改写 rewrite**（SSE，输出统一提案）📄 API §7、AI §1
-- [x] **Schema 迁移工具**：`schema_migrations` 表；DSL + 5 算子(renameField/setDefault/convertType/mapEnum/dropField)；preview/execute/:id/rollback；乐观校验；事件逆放回滚（默认7天，租户可配1–30天）；跨项目逐项目授权 📄 Schema迁移全篇、API §5
+### M3 · 权限与人员
+- [x] 软权限（节点/分支 private + 骨架灰条）+ 视图过滤（只看我的）
+- [x] 角色权限矩阵 `GET /projects/:id/permissions`
+- [x] 人员全局替换（transfer_jobs：preview/execute/查询，DB 席位）
+- [x] 评论 & @（comments 表 + NodeInspector 面板）
 
----
-
-## M5 · 体验（中粒度）
-
-> 验收：5000 节点 3D 总览 ≥30FPS + 可下钻；私有部署一键拉起
-
-- [ ] **3D 总览（react-three-fiber，只读）**：径向球面/分层悬浮布局；实例化渲染+LOD+视锥剔除；点击节点下钻定位回 2D 📄 主文档 F10
-- [ ] **大图性能优化**：子树懒加载、正文延迟同步（骨架先到）；分数索引 reindex 维护任务 📄 Yjs §8、主文档 §8
-- [ ] **私有化部署整包**：Docker Compose / K8s Helm；依赖全自托管；无外网时模型网关指向本地/客户 Key 📄 主文档 §5.7
-
----
-
-## M6 · 进阶（中粒度）
-
-> 验收：无权者根本拿不到内容；规则自动推送
-
-- [ ] **硬权限隔离（内容子文档）**：骨架文档 + 内容子文档拆分；按 `canSeeContent` 分片鉴权下发；跨权限域移动节点处理 📄 权限 §5、主文档 §5.6
-- [ ] **IM 订阅自动推送**：`im_subscriptions` 表 + 订阅引擎；规则触发（分支变更/里程碑达成/@我）📄 数据模型 §3.10、主文档 F12
-- [ ] **移动端适配深化** 📄 主文档 §2.4
-
----
-
-## 贯穿性事项（全程并行）
-
-- [~] **测试**：单元 / 集成 / E2E（协同多端、AI 校验与降级、迁移回滚、权限矩阵、人员替换幂等）
-  - ✅ Vitest 已接入（`apps/api` / `packages/shared` 各配 `vitest.config.ts` + `test` script；根 `pnpm test` 经 turbo 编排）
-  - ✅ 后端纯逻辑首批单测（26 用例）：`buildProposal`（AI 校验流水线，17）、`hasMinRole`/`ROLE_RANK`（权限等级，4）、`newId`（ID 前缀，5）
-  - [ ] web 命令层（MapRepository diff 反推，需 jsdom + Y.Doc）/ 集成 / E2E / AI 降级 / 迁移回滚 / 人员替换幂等 待后续
-- [ ] **可观测性**：日志/指标/链路；AI 请求日志可验证含父链+兄弟标题 📄 AI §9
-- [ ] **安全**：JWT、租户行级隔离、TLS、附件签名 URL、配置加密、审计（change_events 即审计流）📄 主文档 §6
-- [ ] **国际化**：文案外置，首版中文，预留多语言
-- [ ] **SSE 联调**：私有部署反代禁用缓冲（`X-Accel-Buffering: no`）📄 API §12
-- [ ] **文档单一事实来源同步**：表结构/契约变更同步回写 主文档 §3.2 / 数据模型 / API 契约总览
-
----
-
-## 文档勘误（建议修订，不阻塞开发）
-
-- [ ] 主文档 §3.2 `projects` 表仍列 `map_id`，DDL 已改为"不冗余、由 maps.project_id join"——主文档该处待同步 📄 数据模型 §3.2
-- [ ] 主文档 附录D IM 示例链接残留旧占位名 `app.mindflow.example`（应为 mindline）
+### M4 · 拓展
+- [x] IM 渠道 + 手动发布（企微/钉钉/飞书/Slack/Webhook）
+- [x] 父子项目树 + 跨项目镜像引用
+- [x] AI converse / complete / rewrite（SSE 统一提案）
+- [x] Schema 迁移工具（DSL + 5 算子 + preview/execute/rollback + 事件逆放）
 
 ---
 
