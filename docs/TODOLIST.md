@@ -70,10 +70,11 @@
 
 ### B · 3D 树（只读总览）
 
-- [ ] 3D 总览（react-three-fiber，只读）：径向球面 / 分层悬浮布局 📄 主文档 F10
-- [ ] 实例化渲染 + LOD + 视锥剔除（目标 5000 节点 ≥30FPS）
-- [ ] 点击节点下钻定位回 2D
-- [ ] 大图性能配套：子树懒加载、正文延迟同步（骨架先到）📄 Yjs §8
+- [x] 3D 总览（react-three-fiber，只读）：**分层径向树**布局（`layout3d.ts`）📄 主文档 F10
+- [x] 实例化渲染（InstancedMesh 单 draw call + hover-only 标签 + 批量边）；OrbitControls 旋转/缩放/漫游
+- [x] 点击节点下钻定位回 2D（复用 `pendingFocusId`→setCenter；MapPage `view` 切换 + lazy 加载 three）
+- [ ] 后续：径向球面布局切换、距离裁剪、被折叠节点下钻自动展开、子树懒加载/正文延迟同步 📄 Yjs §8
+  - 注：5000 节点 ≥30FPS 验收需浏览器实测（InstancedMesh 单 draw call 已就位）
 
 ### C · 补齐已有功能的尾巴
 

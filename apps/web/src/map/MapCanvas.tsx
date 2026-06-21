@@ -114,11 +114,14 @@ export function MapCanvas({
   nodes,
   provider,
   projectId,
+  focusNodeId,
 }: {
   repo: MapRepository;
   nodes: NodeView[];
   provider: HocuspocusProvider | null;
   projectId: string;
+  /** 外部请求聚焦的节点（如从 3D 总览下钻回 2D）。 */
+  focusNodeId?: string | null;
 }) {
   const user = useAuth((s) => s.user);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -139,6 +142,13 @@ export function MapCanvas({
   const [edgeColorMode, setEdgeColorMode] = useState<EdgeColorMode>('varied');
   const [canvasMode, setCanvasMode] = useState<CanvasMode>('dots');
   const dialog = useDialog();
+
+  // 外部下钻聚焦（如 3D 总览点击节点回 2D）：选中并触发居中（复用 pendingFocusId → setCenter）
+  useEffect(() => {
+    if (!focusNodeId) return;
+    setSelectedId(focusNodeId);
+    setPendingFocusId(focusNodeId);
+  }, [focusNodeId]);
   const ai = useProposal(repo);
   const viewFilter = useViewFilter(user?.id ?? '');
 
