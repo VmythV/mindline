@@ -59,12 +59,14 @@
 - [x] `im channels` / `im publish`：列渠道 + 发布卡片
 - [x] SKILL 集成包 `apps/cli/SKILL.md`（命令速查 + 典型流程，可直接挂载）+ README
 
-**路线 2（待续）· 节点协同写入 + 提案写回**
+**路线 2（已交付）· 节点协同写入 + 提案写回（方案 D）**
 
-- [ ] ⚠️ **核心技术决策**：CLI 写节点需经协同文档（Y.Doc，约定②），服务端无法直接写。
-      需新增「服务端/collab 受控写通道」或离线写后协调合并。
-- [ ] `node create / rename / set-field / move / delete`（依赖上面的写通道）
-- [ ] `ai decompose --apply`：确认后写回协同文档（产出 `aiGenerate` 事件）
+- [x] 命令层下沉 `packages/map-core`（MapRepository + NodeView + EmitEvent；web re-export 零回归）
+- [x] `Command` 契约入 `packages/shared`（createChild/rename/setField/setType/move/delete/applyProposal）
+- [x] api 写通道 `apps/api/src/maps`：`POST /maps/:mapId/commands` → 经 Hocuspocus provider 连 collab 执行命令层 → `ChangesService.append` 落库 → collab 广播（连接池 + 闲置 TTL；Editor+）
+- [x] CLI 写命令：`node create / rename / move / delete / set-field`
+- [x] `ai decompose --apply`：SSE 重建 Proposal → `applyProposal` 命令写回（产出 `aiGenerate` 批量事件）
+- [ ] 后续优化：连接池跨多 api 实例的复用度量、写后强一致读（当前快照读仍可能滞后数秒）
 
 ### B · 3D 树（只读总览）
 

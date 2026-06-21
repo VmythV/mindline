@@ -2,12 +2,12 @@
 
 > 配套主文档 `../思谱-需求文档.md` 第 5.3、5.4 节。本篇细化协同文档结构、排序、命令层、变更事件派生、撤销重做、在线状态与服务端持久化。
 
-| 项 | 内容 |
-|----|------|
-| 版本 | v0.1 |
-| 日期 | 2026-05-30 |
+| 项   | 内容                                    |
+| ---- | --------------------------------------- |
+| 版本 | v0.1                                    |
+| 日期 | 2026-05-30                              |
 | 关联 | F1 编辑、F8 协作、F4 变更记录、D1/D2/D7 |
-| 排期 | 协同内核与命令层 M0；Awareness/历史 M1 |
+| 排期 | 协同内核与命令层 M0；Awareness/历史 M1  |
 
 ---
 
@@ -65,20 +65,22 @@ Y.Doc
 
 **所有用户编辑必须经命令层**，这是唯一写入口。命令同时：① 在一个 Yjs 事务内改文档（带 origin 标记），② 产出语义 `ChangeEvent`。
 
+> **命令层下沉（路线2）**：命令层实现已从 `apps/web` 下沉到 `packages/map-core`（`MapRepository`），前后端复用——浏览器直接执行；服务端（api 的 `CollabWriterService`，经 `POST /maps/:mapId/commands`）作为 Hocuspocus 客户端连入 collab 后执行同一套命令，供 CLI / AI 写节点。**无论谁触发，写入口仍只此一处**（约定②不变）。
+
 ### 4.1 命令清单
 
-| 命令 | 文档变更 | 产出 ChangeEvent.op |
-|------|----------|---------------------|
-| CreateNode | 在 nodes 加节点 + 设 parentId/order | create |
-| DeleteSubtree | 递归删节点（或标记 tombstone） | delete（每节点一条，同 batchId） |
-| MoveNode | 改 parentId/order | move（before/after = 父+序） |
-| RenameNode | 改 title | rename |
-| SetField | 改 data.<key> | setField（field/before/after） |
-| SetOwner | 改 ownerId | setOwner |
-| SetType | 改 type（按 A10 处理 data） | setField（type） |
-| Transfer | 批量改 owner/collab/@ | transfer（批量，同 batchId） |
-| ApplyProposal | 接受 AI proposal 的勾选 ops | aiGenerate（同 batchId） |
-| AddComment | （评论存关系库，非 Y.Doc） | comment |
+| 命令          | 文档变更                            | 产出 ChangeEvent.op              |
+| ------------- | ----------------------------------- | -------------------------------- |
+| CreateNode    | 在 nodes 加节点 + 设 parentId/order | create                           |
+| DeleteSubtree | 递归删节点（或标记 tombstone）      | delete（每节点一条，同 batchId） |
+| MoveNode      | 改 parentId/order                   | move（before/after = 父+序）     |
+| RenameNode    | 改 title                            | rename                           |
+| SetField      | 改 data.<key>                       | setField（field/before/after）   |
+| SetOwner      | 改 ownerId                          | setOwner                         |
+| SetType       | 改 type（按 A10 处理 data）         | setField（type）                 |
+| Transfer      | 批量改 owner/collab/@               | transfer（批量，同 batchId）     |
+| ApplyProposal | 接受 AI proposal 的勾选 ops         | aiGenerate（同 batchId）         |
+| AddComment    | （评论存关系库，非 Y.Doc）          | comment                          |
 
 ### 4.2 命令执行骨架
 
@@ -86,9 +88,9 @@ Y.Doc
 function execute(cmd: Command, ctx: Ctx) {
   const events: ChangeEvent[] = [];
   ydoc.transact(() => {
-    cmd.apply(ydoc, (ev) => events.push(ev));   // apply 内部收集语义事件
+    cmd.apply(ydoc, (ev) => events.push(ev)); // apply 内部收集语义事件
   }, ctx.origin /* 本地客户端标识，供 UndoManager/派生用 */);
-  changeEventSink.emit(events);                  // 异步批量送 API 落库
+  changeEventSink.emit(events); // 异步批量送 API 落库
 }
 ```
 
@@ -98,6 +100,7 @@ function execute(cmd: Command, ctx: Ctx) {
 ### 4.3 ChangeEvent 派生方式
 
 采用「**命令显式产出**」而非「监听 observeDeep 反推」：
+
 - 命令最清楚自己改了什么（field、before、after），直接构造事件，可靠且可读。
 - observeDeep 反推语义（区分「移动」vs「删+建」）困难且易错。
 - 远端协同进来的变更**不**在本地重复派生事件（避免重复落库）——事件由**发起方**客户端产出并落库；其他端只应用文档变更。
@@ -110,8 +113,8 @@ function execute(cmd: Command, ctx: Ctx) {
 
 ```ts
 const undoManager = new Y.UndoManager(nodesType, {
-  trackedOrigins: new Set([localOrigin]),   // 仅跟踪本地 origin → 只撤自己
-  captureTimeout: 500                        // 500ms 内的连续输入合并为一步
+  trackedOrigins: new Set([localOrigin]), // 仅跟踪本地 origin → 只撤自己
+  captureTimeout: 500, // 500ms 内的连续输入合并为一步
 });
 ```
 
@@ -155,9 +158,9 @@ WS /collab/:mapId
 
 ### 7.1 持久化模型
 
-| 表 | 内容 |
-|----|------|
-| `yjs_updates(map_id, seq, update bytea, ts)` | 增量 update 追加写 |
+| 表                                                | 内容                     |
+| ------------------------------------------------- | ------------------------ |
+| `yjs_updates(map_id, seq, update bytea, ts)`      | 增量 update 追加写       |
 | `yjs_snapshots(map_id, version, state bytea, ts)` | 周期全量快照（压实历史） |
 
 - 加载：取最近快照 + 其后的增量 updates 合并重建。
@@ -200,11 +203,11 @@ WS /collab/:mapId
 
 ## 11. 待定点敲定（原 §10）
 
-| 原待定 | 敲定结论 |
-|--------|----------|
-| 禁止绕过命令层 | Y.Doc 写操作全部封装在 `MapRepository`，对外仅暴露命令 API；ESLint 自定义规则禁止业务层直接 import yjs 写类型；CI 静态检查拦截绕过。 |
-| 分数索引并发同位插入 | 键相同时以 `nodeId` 字典序作二级稳定排序兜底；不做实时整理；提供阈值触发的后台 `reindex` 维护任务（可选）。 |
-| 富文本+结构撤销边界 | 单一 `UndoManager` 同时 track `nodes`（含内嵌 Y.Text）；`captureTimeout=500ms`；跨多节点的复合命令用 `stopCapturing()` 显式封为一个 undo 单元。 |
+| 原待定               | 敲定结论                                                                                                                                        |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| 禁止绕过命令层       | Y.Doc 写操作全部封装在 `MapRepository`，对外仅暴露命令 API；ESLint 自定义规则禁止业务层直接 import yjs 写类型；CI 静态检查拦截绕过。            |
+| 分数索引并发同位插入 | 键相同时以 `nodeId` 字典序作二级稳定排序兜底；不做实时整理；提供阈值触发的后台 `reindex` 维护任务（可选）。                                     |
+| 富文本+结构撤销边界  | 单一 `UndoManager` 同时 track `nodes`（含内嵌 Y.Text）；`captureTimeout=500ms`；跨多节点的复合命令用 `stopCapturing()` 显式封为一个 undo 单元。 |
 
 ## 12. 时序图：连接 → 加载 → 协同编辑 → 落库
 
@@ -232,34 +235,78 @@ sequenceDiagram
 
 ## 13. 接口契约
 
-### WS /collab/:mapId  (Hocuspocus)
+### WS /collab/:mapId (Hocuspocus)
+
 握手：`?token=<JWT>`（或子协议头）。服务端 `onAuthenticate` 解析 → 注入 `{userId, tenantId, role}`；无权 → 关闭码 4401。
 消息：Yjs sync 协议 + Awareness（二进制帧，由 provider 封装）。
 关闭码：4401 未授权 · 4403 无该 map 权限 · 4404 map 不存在 · 1011 服务端错误。
 
 ### GET /api/maps/:mapId/snapshot
+
 只读快照（导出/3D/搜索/AI 上下文用），非协同通道。
+
 ```jsonc
 // 响应 200
-{ "mapId":"m_1","version":128,
-  "nodes":[ {"id":"n_1","parentId":null,"order":"a0","type":"objective","title":"...","ownerId":"u_1","data":{}} ],
-  "generatedAt": 1730000000000 }
+{
+  "mapId": "m_1",
+  "version": 128,
+  "nodes": [
+    {
+      "id": "n_1",
+      "parentId": null,
+      "order": "a0",
+      "type": "objective",
+      "title": "...",
+      "ownerId": "u_1",
+      "data": {},
+    },
+  ],
+  "generatedAt": 1730000000000,
+}
 ```
 
-### POST /api/maps/:mapId/changes   (内部, 命令层调用)
+### POST /api/maps/:mapId/changes (内部, 命令层调用)
+
 批量落库语义变更事件（由发起方写入）。
+
 ```jsonc
 // 请求
-{ "events": [
-   {"nodeId":"n_42","op":"setField","field":"priority","before":"中","after":"高","batchId":null,"ts":1730000000000}
-] }
+{
+  "events": [
+    {
+      "nodeId": "n_42",
+      "op": "setField",
+      "field": "priority",
+      "before": "中",
+      "after": "高",
+      "batchId": null,
+      "ts": 1730000000000,
+    },
+  ],
+}
 // 响应 200 { "accepted": 1 }
 ```
 
-### GET /api/maps/:mapId/changes   (时间轴/历史查询)
+### GET /api/maps/:mapId/changes (时间轴/历史查询)
+
 查询参数：`actor, op, field, batchId, branch(子树根id), from, to, cursor, limit`。
+
 ```jsonc
 // 响应 200
-{ "items":[ {"id":"c_1","nodeId":"n_42","actorId":"u_1","op":"setField","field":"priority","before":"中","after":"高","batchId":"b_1","ts":1730000000000} ],
-  "nextCursor":"..." }
+{
+  "items": [
+    {
+      "id": "c_1",
+      "nodeId": "n_42",
+      "actorId": "u_1",
+      "op": "setField",
+      "field": "priority",
+      "before": "中",
+      "after": "高",
+      "batchId": "b_1",
+      "ts": 1730000000000,
+    },
+  ],
+  "nextCursor": "...",
+}
 ```

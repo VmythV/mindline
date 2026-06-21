@@ -32,12 +32,18 @@ importers:
 
   apps/api:
     dependencies:
+      '@hocuspocus/provider':
+        specifier: ^2.15.2
+        version: 2.15.3(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)
       '@mindline/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@mindline/infra':
         specifier: workspace:*
         version: link:../../packages/infra
+      '@mindline/map-core':
+        specifier: workspace:*
+        version: link:../../packages/map-core
       '@mindline/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -74,6 +80,9 @@ importers:
       rxjs:
         specifier: ^7.8.1
         version: 7.8.2
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.0
       yjs:
         specifier: ^13.6.31
         version: 13.6.31
@@ -87,6 +96,9 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.19
+      '@types/ws':
+        specifier: ^8.18.0
+        version: 8.18.1
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -161,6 +173,9 @@ importers:
       '@hocuspocus/provider':
         specifier: ^2.15.2
         version: 2.15.3(y-protocols@1.0.7(yjs@13.6.31))(yjs@13.6.31)
+      '@mindline/map-core':
+        specifier: workspace:*
+        version: link:../../packages/map-core
       '@mindline/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -250,6 +265,25 @@ importers:
       '@types/node':
         specifier: ^22.10.2
         version: 22.19.19
+      tsup:
+        specifier: ^8.3.5
+        version: 8.5.1(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/map-core:
+    dependencies:
+      '@mindline/shared':
+        specifier: workspace:*
+        version: link:../shared
+      fractional-indexing:
+        specifier: ^3.2.0
+        version: 3.2.0
+      yjs:
+        specifier: ^13.6.20
+        version: 13.6.31
+    devDependencies:
       tsup:
         specifier: ^8.3.5
         version: 8.5.1(jiti@2.7.0)(postcss@8.5.15)(tsx@4.22.3)(typescript@5.9.3)

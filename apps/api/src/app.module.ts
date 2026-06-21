@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { ProjectsModule } from './projects/projects.module';
 import { NodeTypesModule } from './node-types/node-types.module';
 import { ChangesModule } from './changes/changes.module';
+import { MapsModule } from './maps/maps.module';
 import { AiModule } from './ai/ai.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { CommentsModule } from './comments/comments.module';
@@ -27,6 +28,7 @@ import { HealthController } from './health.controller';
     ProjectsModule,
     NodeTypesModule,
     ChangesModule,
+    MapsModule,
     AiModule,
     MilestonesModule,
     CommentsModule,

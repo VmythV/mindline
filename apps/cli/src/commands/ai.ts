@@ -1,5 +1,6 @@
 import type { Command } from 'commander';
-import { stream } from '../client';
+import type { Proposal, ProposalOp, ExecuteCommandsResult } from '@mindline/shared';
+import { stream, request } from '../client';
 import { output, info, isJson, fail } from '../output';
 
 /** 从松散结构中安全取字符串字段（SSE data 形态随服务端微调）。 */
@@ -32,19 +33,22 @@ async function withAbort(fn: (signal: AbortSignal) => Promise<void>): Promise<vo
 }
 
 export function registerAiCommands(program: Command): void {
-  const ai = program.command('ai').description('AI 拆解 / 摘要（SSE，只展示结果，不写入协同文档）');
+  const ai = program
+    .command('ai')
+    .description('AI 拆解 / 摘要（SSE；decompose 可 --apply 写回协同文档）');
 
   ai.command('decompose <mapId> <nodeId>')
-    .description('对节点跑 AI 拆解，输出生成的子节点提案（POST /ai/decompose）')
+    .description('对节点跑 AI 拆解，输出子节点提案；--apply 则写回协同文档（POST /ai/decompose）')
     .option('--type <typeKey>', '目标子节点类型')
     .option('--max <n>', '最大子节点数（1-20）', (v) => parseInt(v, 10))
     .option('--prompt <text>', '额外指令')
     .option('--lang <lang>', '输出语言')
+    .option('--apply', '确认后把有效提案写回协同文档（产出 aiGenerate 事件）')
     .action(
       async (
         mapId: string,
         nodeId: string,
-        opts: { type?: string; max?: number; prompt?: string; lang?: string },
+        opts: { type?: string; max?: number; prompt?: string; lang?: string; apply?: boolean },
       ) => {
         const body = {
           mapId,
@@ -77,6 +81,33 @@ export function registerAiCommands(program: Command): void {
         );
 
         if (err) fail(err.code, err.message);
+
+        if (opts.apply && ops.length > 0) {
+          const metaObj = (meta ?? {}) as { proposalId?: string; batchId?: string };
+          const proposalOps = ops as ProposalOp[];
+          const valid = proposalOps.filter((o) => o.valid);
+          if (valid.length === 0) fail('NO_VALID_OPS', '没有可应用的有效提案');
+          const proposal: Proposal = {
+            proposalId: metaObj.proposalId ?? '',
+            capability: 'decompose',
+            mapId,
+            anchorNodeId: nodeId,
+            batchId: metaObj.batchId ?? '',
+            ops: proposalOps,
+          };
+          const res = await request<ExecuteCommandsResult>(
+            'POST',
+            `/maps/${encodeURIComponent(mapId)}/commands`,
+            {
+              commands: [{ kind: 'applyProposal', proposal, accepted: valid.map((o) => o.tempId) }],
+            },
+          );
+          output({ meta, ops, done, applied: res }, () =>
+            info(`✓ 已写回 ${res.created.length} 个节点（batch ${proposal.batchId}）`),
+          );
+          return;
+        }
+
         output({ meta, ops, done }, () => info(`✓ 拆解完成，共生成 ${ops.length} 个节点提案`));
       },
     );

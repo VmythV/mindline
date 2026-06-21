@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@hocuspocus/provider": "^2.15.2",
+    "@mindline/map-core": "workspace:*",
     "@mindline/shared": "workspace:*",
     "@tanstack/react-query": "^5.62.0",
     "@tiptap/pm": "^2.10.3",
