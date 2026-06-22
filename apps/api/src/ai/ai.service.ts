@@ -1,15 +1,20 @@
 import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { and, eq, isNull, or } from 'drizzle-orm';
-import { newId, type NodeSnapshot, type NodeTypeDefinition } from '@mindline/shared';
+import {
+  newId,
+  type NodeSnapshot,
+  type NodeTypeDefinition,
+  type ProposalOp,
+} from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
 import { hasMinRole } from '../common/roles';
 import { ChangesService } from '../changes/changes.service';
 import { ProvidersService } from './providers.service';
-import { buildContext } from './context-builder';
+import { buildContext, type DecomposeContext } from './context-builder';
 import { buildSystemPrompt, buildUserPrompt, EMIT_SUBTREE_FUNCTION } from './prompt';
-import { callGateway, callGatewayText } from './gateway';
-import { buildProposal } from './validate';
+import { callGatewayStream, callGatewayText, type RawNode } from './gateway';
+import { validateNode } from './validate';
 import type { DecomposeDto } from './dto/decompose.dto';
 import type { SummarizeDto } from './dto/summarize.dto';
 import type { ConverseDto } from './dto/converse.dto';
@@ -60,7 +65,10 @@ export class AiService {
         and(
           eq(schema.nodeTypeSchemas.tenantId, tenantId),
           eq(schema.nodeTypeSchemas.typeKey, typeKey),
-          or(eq(schema.nodeTypeSchemas.projectId, projectId), isNull(schema.nodeTypeSchemas.projectId)),
+          or(
+            eq(schema.nodeTypeSchemas.projectId, projectId),
+            isNull(schema.nodeTypeSchemas.projectId),
+          ),
         ),
       );
     if (!rows.length) return null;
@@ -79,63 +87,116 @@ export class AiService {
     const targetSchema = await this.loadSchema(ctx.tenantId, projectId, targetType);
 
     const maxChildren = dto.maxChildren ?? 8;
+    const depth = Math.min(Math.max(dto.depth ?? 1, 1), 3);
+    const subMax = depth > 1 ? Math.min(maxChildren, 5) : maxChildren; // 深层每节点子数收敛，防爆炸
+    const FRONTIER_LIMIT = 6; // 每层最多对前 N 个节点继续下钻
     const lang = dto.lang || 'zh';
-    const system = buildSystemPrompt(maxChildren, lang);
-    const user = buildUserPrompt(ctxObj, targetSchema, dto.prompt);
 
     const proposalId = newId('aiProposal');
     const batchId = newId('batch');
     // 租户凭证路由：取启用配置（默认优先）→ 解密；无则回退 env，再无则 stub
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
-      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
       : undefined;
     const hasGateway = !!(creds?.url || process.env.AI_GATEWAY_URL);
-    const provider = hasGateway ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai' : 'stub';
-    const model = hasGateway ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini' : 'stub';
-    emit('meta', { proposalId, batchId, provider, model });
+    const provider = hasGateway
+      ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai'
+      : 'stub';
+    const model = hasGateway
+      ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini'
+      : 'stub';
+    emit('meta', { proposalId, batchId, provider, model, depth });
 
-    const stubTitles = Array.from({ length: Math.min(maxChildren, 4) }, (_, i) =>
-      `${ctxObj.target.title} · 方向 ${i + 1}`,
-    );
-    const gw = {
-      system,
-      user,
-      functionDef: EMIT_SUBTREE_FUNCTION as unknown as Record<string, unknown>,
-      signal,
-      stubTitles,
-      creds,
+    const allOps: ProposalOp[] = [];
+    let tempCounter = 0;
+    let tokIn = 0;
+    let tokOut = 0;
+
+    // 单层拆解：调网关（协议失败重试1次）→ 逐节点校验 → 即时 emit（渐进推送，多层时边层边推）
+    const runLevel = async (
+      lvlCtx: DecomposeContext,
+      parentRef: string,
+      max: number,
+      existing: Set<string>,
+    ): Promise<ProposalOp[]> => {
+      const gw = {
+        system: buildSystemPrompt(max, lang),
+        user: buildUserPrompt(lvlCtx, targetSchema, dto.prompt),
+        functionDef: EMIT_SUBTREE_FUNCTION as unknown as Record<string, unknown>,
+        signal,
+        stubTitles: Array.from(
+          { length: Math.min(max, 4) },
+          (_, i) => `${lvlCtx.target.title} · 方向 ${i + 1}`,
+        ),
+        creds,
+      };
+      // 流式 partial：模型每吐出一个完整子节点即校验 + emit（边生成边推，首字更快）
+      const ops: ProposalOp[] = [];
+      const onNode = (raw: RawNode) => {
+        if (ops.length >= max) return; // 截断到 max
+        const op = validateNode({
+          raw,
+          index: ops.length,
+          tempId: `t${++tempCounter}`,
+          parentRef,
+          targetType,
+          schema: targetSchema,
+          existing,
+        });
+        ops.push(op);
+        allOps.push(op);
+        emit('op', op);
+      };
+      let res = await callGatewayStream(gw, onNode);
+      if (ops.length === 0) res = await callGatewayStream({ ...gw, retryHint: true }, onNode);
+      tokIn += res.modelMeta.tokens.in;
+      tokOut += res.modelMeta.tokens.out;
+      return ops;
     };
 
-    let result = await callGateway(gw);
-    if (!result.nodes.length) {
-      // 协议级失败 → 重试 1 次（追加“必须用函数返回”提示）
-      result = await callGateway({ ...gw, retryHint: true });
+    // 第 1 层：anchor 的直接子节点
+    const existingTitles = new Set(ctxObj.children.map((c) => c.title.trim()).filter(Boolean));
+    let frontier = await runLevel(ctxObj, dto.nodeId, maxChildren, existingTitles);
+
+    // 第 2..depth 层：对上一层节点（截断 FRONTIER_LIMIT）逐个下钻，parentRef=上层 tempId
+    for (let d = 2; d <= depth && !signal.aborted; d++) {
+      const next: ProposalOp[] = [];
+      for (const parentOp of frontier.slice(0, FRONTIER_LIMIT)) {
+        if (signal.aborted) break;
+        const siblings = frontier
+          .filter((o) => o !== parentOp)
+          .map((o) => ({ id: o.tempId, title: o.node?.title ?? '' }));
+        const childCtx: DecomposeContext = {
+          target: {
+            id: '',
+            type: parentOp.node?.type ?? targetType,
+            title: parentOp.node?.title ?? '',
+            data: {},
+          },
+          ancestors: [],
+          siblings,
+          children: [],
+          parentType: null,
+        };
+        next.push(...(await runLevel(childCtx, parentOp.tempId, subMax, new Set<string>())));
+      }
+      frontier = next;
     }
 
-    const proposal = buildProposal({
-      rawNodes: result.nodes,
-      schema: targetSchema,
-      targetType,
-      anchorNodeId: dto.nodeId,
-      mapId: dto.mapId,
-      proposalId,
-      batchId,
-      maxChildren,
-      existingChildTitles: ctxObj.children.map((c) => c.title),
-      modelMeta: result.modelMeta,
-    });
-
-    for (const op of proposal.ops) emit('op', op);
-
-    const valid = proposal.ops.filter((o) => o.valid).length;
+    const valid = allOps.filter((o) => o.valid).length;
     emit('done', {
       proposalId,
       stats: {
-        total: proposal.ops.length,
+        total: allOps.length,
         valid,
-        invalid: proposal.ops.length - valid,
-        tokens: result.modelMeta.tokens,
+        invalid: allOps.length - valid,
+        tokens: { in: tokIn, out: tokOut },
       },
     });
 
@@ -146,10 +207,10 @@ export class AiService {
         projectId,
         userId: ctx.userId,
         capability: 'decompose',
-        provider: result.modelMeta.provider,
-        model: result.modelMeta.model,
-        tokensIn: result.modelMeta.tokens.in,
-        tokensOut: result.modelMeta.tokens.out,
+        provider,
+        model,
+        tokensIn: tokIn,
+        tokensOut: tokOut,
       });
     } catch {
       /* 计量失败忽略 */
@@ -168,7 +229,12 @@ export class AiService {
     const root = nodes.find((n) => n.id === rootId);
     const byId = new Map(nodes.map((n) => [n.id, n]));
     const strip = (html: unknown) =>
-      typeof html === 'string' ? html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      typeof html === 'string'
+        ? html
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+        : '';
     const lines: string[] = [];
     let count = 0;
     const seen = new Set<string>();
@@ -196,11 +262,20 @@ export class AiService {
 
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
-      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
       : undefined;
     const hasGateway = !!(creds?.url || process.env.AI_GATEWAY_URL);
-    const provider = hasGateway ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai' : 'stub';
-    const model = hasGateway ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini' : 'stub';
+    const provider = hasGateway
+      ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai'
+      : 'stub';
+    const model = hasGateway
+      ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini'
+      : 'stub';
     emit('meta', { provider, model });
 
     const stubText = `（示例摘要）「${sub.title}」共包含 ${Math.max(sub.count - 1, 0)} 个子节点，围绕该主题展开。配置真实 AI 网关后此处为模型生成的摘要初稿，可编辑后填入正文。`;
@@ -233,11 +308,20 @@ export class AiService {
 
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
-      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
       : undefined;
     const hasGateway = !!(creds?.url || process.env.AI_GATEWAY_URL);
-    const provider = hasGateway ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai' : 'stub';
-    const model = hasGateway ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini' : 'stub';
+    const provider = hasGateway
+      ? creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai'
+      : 'stub';
+    const model = hasGateway
+      ? creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini'
+      : 'stub';
     emit('meta', { provider, model });
 
     const lastUser = dto.messages.at(-1)?.content ?? '请分析这个子树';
@@ -255,11 +339,18 @@ export class AiService {
 
     try {
       await this.providers.record({
-        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
-        capability: 'converse', provider: result.modelMeta.provider,
-        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+        tenantId: ctx.tenantId,
+        projectId,
+        userId: ctx.userId,
+        capability: 'converse',
+        provider: result.modelMeta.provider,
+        model: result.modelMeta.model,
+        tokensIn: result.modelMeta.tokens.in,
+        tokensOut: result.modelMeta.tokens.out,
       });
-    } catch { /* 计量失败忽略 */ }
+    } catch {
+      /* 计量失败忽略 */
+    }
   }
 
   /** 补全查重（SSE）：检测 title 与同级节点的相似度，输出分析文本。 */
@@ -276,7 +367,12 @@ export class AiService {
 
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
-      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
       : undefined;
     const provider = creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai';
     const model = creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini';
@@ -290,11 +386,18 @@ export class AiService {
 
     try {
       await this.providers.record({
-        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
-        capability: 'complete', provider: result.modelMeta.provider,
-        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+        tenantId: ctx.tenantId,
+        projectId,
+        userId: ctx.userId,
+        capability: 'complete',
+        provider: result.modelMeta.provider,
+        model: result.modelMeta.model,
+        tokensIn: result.modelMeta.tokens.in,
+        tokensOut: result.modelMeta.tokens.out,
       });
-    } catch { /* 计量失败忽略 */ }
+    } catch {
+      /* 计量失败忽略 */
+    }
   }
 
   /** 改写（SSE）：按 prompt 改写节点标题，输出改写结果文本流。 */
@@ -307,7 +410,12 @@ export class AiService {
 
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
-      ? { url: resolved.endpoint, key: resolved.apiKey, model: resolved.model, provider: resolved.provider }
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
       : undefined;
     const provider = creds?.provider || process.env.AI_GATEWAY_PROVIDER || 'openai';
     const model = creds?.model || process.env.AI_GATEWAY_MODEL || 'gpt-4o-mini';
@@ -321,10 +429,17 @@ export class AiService {
 
     try {
       await this.providers.record({
-        tenantId: ctx.tenantId, projectId, userId: ctx.userId,
-        capability: 'rewrite', provider: result.modelMeta.provider,
-        model: result.modelMeta.model, tokensIn: result.modelMeta.tokens.in, tokensOut: result.modelMeta.tokens.out,
+        tenantId: ctx.tenantId,
+        projectId,
+        userId: ctx.userId,
+        capability: 'rewrite',
+        provider: result.modelMeta.provider,
+        model: result.modelMeta.model,
+        tokensIn: result.modelMeta.tokens.in,
+        tokensOut: result.modelMeta.tokens.out,
       });
-    } catch { /* 计量失败忽略 */ }
+    } catch {
+      /* 计量失败忽略 */
+    }
   }
 }

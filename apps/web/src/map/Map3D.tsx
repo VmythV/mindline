@@ -3,7 +3,7 @@ import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { NodeView } from './types';
-import { layout3d } from './layout3d';
+import { layout3d, type Layout3dMode } from './layout3d';
 
 /** 内置节点类型配色（与 2D 观感呼应）；未知类型用灰。 */
 const TYPE_COLORS: Record<string, string> = {
@@ -17,8 +17,16 @@ const TYPE_COLORS: Record<string, string> = {
 };
 const DEFAULT_COLOR = '#64748b';
 
-function Scene({ nodes, onPick }: { nodes: NodeView[]; onPick: (id: string) => void }) {
-  const { positions, edges } = useMemo(() => layout3d(nodes), [nodes]);
+function Scene({
+  nodes,
+  mode,
+  onPick,
+}: {
+  nodes: NodeView[];
+  mode: Layout3dMode;
+  onPick: (id: string) => void;
+}) {
+  const { positions, edges } = useMemo(() => layout3d(nodes, mode), [nodes, mode]);
   // 仅渲染有坐标的节点（防御：脏数据/环已被 layout3d 跳过）
   const ordered = useMemo(() => nodes.filter((n) => positions.has(n.id)), [nodes, positions]);
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -100,14 +108,16 @@ function Scene({ nodes, onPick }: { nodes: NodeView[]; onPick: (id: string) => v
 /** 3D 树总览（只读，F10）。点击节点经 onPick 下钻定位回 2D。 */
 export default function Map3D({
   nodes,
+  mode = 'tree',
   onPick,
 }: {
   nodes: NodeView[];
+  mode?: Layout3dMode;
   onPick: (nodeId: string) => void;
 }) {
   return (
     <Canvas camera={{ position: [0, 12, 42], fov: 50 }} style={{ background: '#0f172a' }}>
-      <Scene nodes={nodes} onPick={onPick} />
+      <Scene nodes={nodes} mode={mode} onPick={onPick} />
       <OrbitControls makeDefault enableDamping />
     </Canvas>
   );

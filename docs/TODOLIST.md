@@ -73,8 +73,10 @@
 - [x] 3D 总览（react-three-fiber，只读）：**分层径向树**布局（`layout3d.ts`）📄 主文档 F10
 - [x] 实例化渲染（InstancedMesh 单 draw call + hover-only 标签 + 批量边）；OrbitControls 旋转/缩放/漫游
 - [x] 点击节点下钻定位回 2D（复用 `pendingFocusId`→setCenter；MapPage `view` 切换 + lazy 加载 three）
-- [ ] 后续：径向球面布局切换、距离裁剪、被折叠节点下钻自动展开、子树懒加载/正文延迟同步 📄 Yjs §8
-  - 注：5000 节点 ≥30FPS 验收需浏览器实测（InstancedMesh 单 draw call 已就位）
+- [x] 径向球面布局切换（`layout3d` tree/sphere + header 切换按钮）
+- [x] 被折叠节点下钻自动展开（MapCanvas focus effect 清除被折叠祖先）
+- [ ] 后续：距离裁剪、子树懒加载/正文延迟同步 📄 Yjs §8
+  - ⏳ **待你实机验证**：5000 节点 ≥30FPS 浏览器实测（InstancedMesh 单 draw call 已就位）；3D 旋转/缩放/hover/下钻交互
 
 ### C · 补齐已有功能的尾巴
 
@@ -84,9 +86,13 @@
 - [ ] **D1 落库可靠性收尾**：collab 服务端语义反推兜底（覆盖浏览器硬崩溃极窄窗口）📄 Yjs §4.3
 - [ ] **AI 增强**（M2 尾巴，非必需）：
   - [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}` 📄 AI §11
-  - [ ] depth>1 多层拆解（当前固定 depth=1）
-  - [ ] 模型级流式 partial（当前为聚合后逐 op 推送）
+  - [x] depth>1 多层拆解（迭代 BFS 逐层拆，parentRef 指向上层 tempId，深层 maxChildren 收敛 + frontier 截断防爆炸；depth 上限 3）
+  - [x] 模型级流式 partial（`callGatewayStream` 增量解析 function call arguments，每完整子节点即 emit；content 兜底；stub 逐个吐出）
   - [ ] range 时间区间摘要（当前仅 nodeId 子树）
+  - ⏳ **待你实机验证（需真实 AI 网关）**：depth=2/3 多层拆解效果、流式首字延迟（stub 模式下无真实流式）
+
+> **本轮（AI/3D 打磨）代码状态**：全量 typecheck（12 包）+ lint 通过；后端单测 25 个通过（validate 重构无破坏）。
+> 端到端/浏览器/真实网关验证未做（按约定留待你实机运行）。`pnpm test` 因 cli/map-core 暂无测试文件会整体 exit 1（非代码问题）。
 
 ---
 

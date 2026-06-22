@@ -15,6 +15,7 @@ export function MapPage() {
   const navigate = useNavigate();
   const [showTimeline, setShowTimeline] = useState(false);
   const [view, setView] = useState<'2d' | '3d'>('2d');
+  const [layout3dMode, setLayout3dMode] = useState<'tree' | 'sphere'>('tree');
   const [focusNodeId, setFocusNodeId] = useState<string | null>(null);
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -42,6 +43,14 @@ export function MapPage() {
             ? ' · Tab 建子 · Enter 建同级 · 双击/F2 改名 · Del 删除 · ⌘Z 撤销'
             : ' · 拖拽旋转 · 滚轮缩放 · 点击节点回 2D'}
         </span>
+        {view === '3d' && (
+          <button
+            className="text-sm px-2 py-1 rounded text-slate-500 hover:text-blue-600"
+            onClick={() => setLayout3dMode((m) => (m === 'tree' ? 'sphere' : 'tree'))}
+          >
+            {layout3dMode === 'tree' ? '◳ 分层树' : '○ 球面'}
+          </button>
+        )}
         <button
           className={`text-sm px-2 py-1 rounded ${view === '3d' ? 'bg-blue-50 text-blue-600' : 'text-slate-500 hover:text-blue-600'}`}
           onClick={() => setView((v) => (v === '2d' ? '3d' : '2d'))}
@@ -68,6 +77,7 @@ export function MapPage() {
               >
                 <Map3D
                   nodes={nodes}
+                  mode={layout3dMode}
                   onPick={(id) => {
                     setFocusNodeId(id);
                     setView('2d');

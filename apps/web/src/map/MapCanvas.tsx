@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -143,12 +143,30 @@ export function MapCanvas({
   const [canvasMode, setCanvasMode] = useState<CanvasMode>('dots');
   const dialog = useDialog();
 
-  // 外部下钻聚焦（如 3D 总览点击节点回 2D）：选中并触发居中（复用 pendingFocusId → setCenter）
+  // 外部下钻聚焦（如 3D 总览点击节点回 2D）：先展开被折叠的祖先（否则目标不可见无法居中），
+  // 再选中并触发居中（复用 pendingFocusId → setCenter）。ref 防 nodes 变化重复处理。
+  const lastFocusRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!focusNodeId) return;
+    if (!focusNodeId || focusNodeId === lastFocusRef.current) return;
+    lastFocusRef.current = focusNodeId;
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const ancestors = new Set<string>();
+    const guard = new Set<string>();
+    let cur = byId.get(focusNodeId)?.parentId ?? null;
+    while (cur && !guard.has(cur)) {
+      ancestors.add(cur);
+      guard.add(cur);
+      cur = byId.get(cur)?.parentId ?? null;
+    }
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      for (const a of ancestors) if (next.delete(a)) changed = true;
+      return changed ? next : prev;
+    });
     setSelectedId(focusNodeId);
     setPendingFocusId(focusNodeId);
-  }, [focusNodeId]);
+  }, [focusNodeId, nodes]);
   const ai = useProposal(repo);
   const viewFilter = useViewFilter(user?.id ?? '');
 
