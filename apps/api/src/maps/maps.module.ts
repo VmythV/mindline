@@ -8,5 +8,6 @@ import { MapsController } from './maps.controller';
   imports: [ChangesModule],
   providers: [CollabWriterService],
   controllers: [MapsController],
+  exports: [CollabWriterService],
 })
 export class MapsModule {}

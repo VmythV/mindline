@@ -262,6 +262,26 @@ export class MapRepository {
     ]);
   }
 
+  /** 设置/转移节点负责人（产出 op=setOwner 审计事件）。人员全局替换在服务端经此命令批量执行。 */
+  setOwner(id: string, ownerId: string | null): void {
+    const node = this.nodes.get(id);
+    if (!node) return;
+    const before = (node.get('ownerId') as string | null) ?? null;
+    if (before === ownerId) return;
+    this.doc.transact(() => node.set('ownerId', ownerId), this.origin);
+    this.onChanges([
+      {
+        nodeId: id,
+        op: 'setOwner',
+        field: 'ownerId',
+        before,
+        after: ownerId,
+        pathIds: this.getAncestorIds(id),
+        ts: Date.now(),
+      },
+    ]);
+  }
+
   /**
    * 切换节点类型（A10）：旧值一律保留；不在新类型 Schema 的旧字段登记到 `_deprecatedFields`
    * 并以只读形式呈现；若新类型重新包含某废弃字段则自动复活。validFieldKeys 由调用方按新类型 Schema 传入。

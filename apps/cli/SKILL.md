@@ -41,6 +41,7 @@ mindline node create <mapId> <parentId> [--title "<标题>"] [--type <typeKey>] 
 mindline node rename <mapId> <nodeId> "<新标题>" --json
 mindline node move <mapId> <nodeId> <newParentId> --json
 mindline node delete <mapId> <nodeId> --json     # 删除节点及整棵子树
+mindline node set-owner <mapId> <nodeId> <userId> --json   # 设置负责人
 mindline node set-field <mapId> <nodeId> <field> '<jsonValue>' --json
 
 # AI（SSE）

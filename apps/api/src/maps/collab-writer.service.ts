@@ -83,6 +83,31 @@ export class CollabWriterService implements OnModuleDestroy {
     return { created, eventCount: events.length };
   }
 
+  /**
+   * 人员替换：把该 map 内 ownerId===fromUserId 的节点负责人改挂 toUserId（经命令层 setOwner，产出审计）。
+   * 基于 live doc 遍历（不读滞后快照）。返回替换的节点数。
+   */
+  async replaceOwner(
+    mapId: string,
+    ctx: Ctx,
+    token: string,
+    fromUserId: string,
+    toUserId: string,
+  ): Promise<number> {
+    const conn = await this.getConn(mapId, token);
+    conn.events = [];
+    const targets = conn.repo.list().filter((n) => n.data.ownerId === fromUserId);
+    for (const n of targets) conn.repo.setOwner(n.id, toUserId);
+    const events = conn.events;
+    if (events.length > 0) {
+      await this.changes.append(mapId, ctx, {
+        events: events.map((e) => ({ ...e, eventId: newId('changeEvent') })),
+      });
+    }
+    this.touch(conn);
+    return targets.length;
+  }
+
   /** 将单条 Command 映射到命令层方法；返回本条新建的节点 id。 */
   private applyCommand(repo: MapRepository, cmd: Command): string[] {
     switch (cmd.kind) {
@@ -101,6 +126,9 @@ export class CollabWriterService implements OnModuleDestroy {
         return [];
       case 'setField':
         repo.setField(cmd.nodeId, cmd.field, cmd.value);
+        return [];
+      case 'setOwner':
+        repo.setOwner(cmd.nodeId, cmd.ownerId);
         return [];
       case 'setType':
         repo.setType(cmd.nodeId, cmd.newType, cmd.validFieldKeys);

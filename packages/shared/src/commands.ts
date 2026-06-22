@@ -16,6 +16,7 @@ export type Command =
     }
   | { kind: 'rename'; nodeId: string; title: string }
   | { kind: 'setField'; nodeId: string; field: string; value: unknown }
+  | { kind: 'setOwner'; nodeId: string; ownerId: string | null }
   | { kind: 'setType'; nodeId: string; newType: string; validFieldKeys: string[] }
   | { kind: 'move'; nodeId: string; newParentId: string }
   | { kind: 'delete'; nodeId: string }

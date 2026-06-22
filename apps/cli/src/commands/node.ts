@@ -140,6 +140,14 @@ export function registerNodeCommands(program: Command): void {
     });
 
   node
+    .command('set-owner <mapId> <nodeId> <userId>')
+    .description('设置节点负责人（产出 setOwner 审计事件）')
+    .action(async (mapId: string, nodeId: string, userId: string) => {
+      const res = await exec(mapId, [{ kind: 'setOwner', nodeId, ownerId: userId }]);
+      output(res, () => info('✓ 已设置负责人'));
+    });
+
+  node
     .command('set-field <mapId> <nodeId> <field> <value>')
     .description('设置节点字段（value 优先按 JSON 解析，失败则按字符串）')
     .action(async (mapId: string, nodeId: string, field: string, value: string) => {

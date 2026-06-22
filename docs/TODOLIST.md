@@ -78,7 +78,8 @@
 
 ### C · 补齐已有功能的尾巴
 
-- [ ] **人员替换 · Yjs 侧**：节点 ownerId 在 Y.Doc 内一并替换（当前仅替换 DB project_members 席位）📄 权限 §6
+- [x] **人员替换 · Yjs 侧**：命令层补 `setOwner`；`CollabWriterService.replaceOwner` 批量改挂受影响 map 内 ownerId；transfer execute 复用（返回 `ownerReplaced`，失败记 conflicts）；preview 真实统计 owner 节点数 📄 权限 §6
+  - 注：preview 读落库快照统计可能滞后；execute 用 live doc 准确替换。已端到端验证（ownerReplaced=1、节点 owner 改挂、setOwner 审计事件）
 - [ ] **多实例协作验证**：真·多实例 Redis 广播 + 持久化 e2e（`scripts/e2e.mjs` 需 Postgres）📄 Yjs §10
 - [ ] **D1 落库可靠性收尾**：collab 服务端语义反推兜底（覆盖浏览器硬崩溃极窄窗口）📄 Yjs §4.3
 - [ ] **AI 增强**（M2 尾巴，非必需）：

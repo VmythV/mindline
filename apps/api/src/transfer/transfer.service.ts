@@ -10,6 +10,8 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { newId } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
+import { ChangesService } from '../changes/changes.service';
+import { CollabWriterService } from '../maps/collab-writer.service';
 import type { TransferPreviewDto } from './dto/transfer-preview.dto';
 
 interface Ctx {
@@ -19,7 +21,11 @@ interface Ctx {
 
 @Injectable()
 export class TransferService {
-  constructor(@Inject(DRIZZLE) private readonly db: Database) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: Database,
+    private readonly changes: ChangesService,
+    private readonly collabWriter: CollabWriterService,
+  ) {}
 
   /**
    * 权限校验：scope=project 时要求调用者是该项目的 admin 或 owner；
@@ -82,18 +88,38 @@ export class TransferService {
 
     const projectIds = memberships.map((m) => m.projectId);
 
+    // 统计各 project 的 map 内 ownerId===fromUser 的节点数（读落库快照，可能滞后数秒，仅作预估）
+    const maps = projectIds.length
+      ? await this.db
+          .select({ id: schema.maps.id, projectId: schema.maps.projectId })
+          .from(schema.maps)
+          .where(inArray(schema.maps.projectId, projectIds))
+      : [];
+    const nodesByProject = new Map<string, number>();
+    let totalNodes = 0;
+    for (const m of maps) {
+      const snap = await this.changes.snapshot(m.id, ctx);
+      const count = snap.nodes.filter((n) => n.ownerId === dto.fromUserId).length;
+      nodesByProject.set(m.projectId, count);
+      totalNodes += count;
+    }
+
     return {
       impact: {
         projects: projectIds.length,
-        nodes: 0, // 节点 owner 在 Yjs，不在 DB，固定返回 0（前端提示"Yjs 实时替换"）
-        mentions: 0, // 同上
+        nodes: totalNodes,
+        mentions: 0, // @ 提及替换待 IM 模块（M4）后续
         memberships: projectIds.length,
       },
-      details: projectIds.map((p) => ({ projectId: p, nodes: 0, memberships: 1 })),
+      details: projectIds.map((p) => ({
+        projectId: p,
+        nodes: nodesByProject.get(p) ?? 0,
+        memberships: 1,
+      })),
     };
   }
 
-  async execute(ctx: Ctx, dto: TransferPreviewDto) {
+  async execute(ctx: Ctx, dto: TransferPreviewDto, token: string) {
     await this.checkPermission(ctx, dto.scope, dto.scopeId);
 
     // 检查是否有进行中的同范围任务（唯一索引 uq_transfer_running）
@@ -192,24 +218,43 @@ export class TransferService {
       }
     }
 
+    // Yjs 侧：对受影响 project 的 map，把 ownerId===fromUser 的节点改挂 toUser（经命令层 setOwner）
+    // 单 map 失败（如 collab 不可达）记 conflicts 并继续，不回滚已转席位（可重跑补齐，setOwner 幂等）
+    let ownerReplaced = 0;
+    const affectedProjectIds = [...new Set(memberRows.map((m) => m.projectId))];
+    const maps = affectedProjectIds.length
+      ? await this.db
+          .select({ id: schema.maps.id })
+          .from(schema.maps)
+          .where(inArray(schema.maps.projectId, affectedProjectIds))
+      : [];
+    for (const m of maps) {
+      try {
+        ownerReplaced += await this.collabWriter.replaceOwner(
+          m.id,
+          ctx,
+          token,
+          dto.fromUserId,
+          dto.toUserId,
+        );
+      } catch {
+        conflicts.push({ nodeId: m.id, reason: 'owner_replace_failed' });
+      }
+    }
+
     await this.db
       .update(schema.transferJobs)
       .set({ status: 'done', processed, conflicts: conflicts.length > 0 ? conflicts : null })
       .where(eq(schema.transferJobs.id, jobId));
 
-    return { jobId, status: 'done', processed, total: memberRows.length, conflicts };
+    return { jobId, status: 'done', processed, ownerReplaced, total: memberRows.length, conflicts };
   }
 
   async getJob(jobId: string, ctx: Ctx) {
     const rows = await this.db
       .select()
       .from(schema.transferJobs)
-      .where(
-        and(
-          eq(schema.transferJobs.id, jobId),
-          eq(schema.transferJobs.tenantId, ctx.tenantId),
-        ),
-      )
+      .where(and(eq(schema.transferJobs.id, jobId), eq(schema.transferJobs.tenantId, ctx.tenantId)))
       .limit(1);
     if (!rows[0]) throw new NotFoundException('任务不存在');
     const job = rows[0];
