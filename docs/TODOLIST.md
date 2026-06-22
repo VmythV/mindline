@@ -75,8 +75,9 @@
 - [x] 点击节点下钻定位回 2D（复用 `pendingFocusId`→setCenter；MapPage `view` 切换 + lazy 加载 three）
 - [x] 径向球面布局切换（`layout3d` tree/sphere + header 切换按钮）
 - [x] 被折叠节点下钻自动展开（MapCanvas focus effect 清除被折叠祖先）
-- [ ] 后续：距离裁剪、子树懒加载/正文延迟同步 📄 Yjs §8
-  - ⏳ **待你实机验证**：5000 节点 ≥30FPS 浏览器实测（InstancedMesh 单 draw call 已就位）；3D 旋转/缩放/hover/下钻交互
+- [x] 性能优化：球体段数随节点数自适应（LOD 减面）+ `frameloop="demand"` 静止不渲染
+- [ ] 后续：raycaster 距离裁剪、子树懒加载/正文延迟同步 📄 Yjs §8
+  - ⏳ **待你实机验证**：5000 节点 ≥30FPS 浏览器实测（InstancedMesh 单 draw call + LOD + 按需渲染已就位）；3D 旋转/缩放/hover/下钻交互
 
 ### C · 补齐已有功能的尾巴
 
@@ -84,12 +85,13 @@
   - 注：preview 读落库快照统计可能滞后；execute 用 live doc 准确替换。已端到端验证（ownerReplaced=1、节点 owner 改挂、setOwner 审计事件）
 - [ ] **多实例协作验证**：真·多实例 Redis 广播 + 持久化 e2e（`scripts/e2e.mjs` 需 Postgres）📄 Yjs §10
 - [ ] **D1 落库可靠性收尾**：collab 服务端语义反推兜底（覆盖浏览器硬崩溃极窄窗口）📄 Yjs §4.3
-- [ ] **AI 增强**（M2 尾巴，非必需）：
-  - [ ] 启动探测每模型能力 `{stream, functionCall, jsonMode}` 📄 AI §11
+- [x] **健壮性**：api 启动 `.env` 健全性校验（`common/env.ts`：JWT_SECRET/AI_CONFIG_SECRET/DATABASE_URL 缺失或默认值告警，不阻断）
+- [x] **AI 增强**（M2 尾巴）：
+  - [x] 能力探测 `{stream, functionCall, jsonMode}`（`gateway.probeCapabilities` + `GET /ai/capabilities`；functionCall 真探，stream/jsonMode 乐观，stub 降级）📄 AI §11
   - [x] depth>1 多层拆解（迭代 BFS 逐层拆，parentRef 指向上层 tempId，深层 maxChildren 收敛 + frontier 截断防爆炸；depth 上限 3）
   - [x] 模型级流式 partial（`callGatewayStream` 增量解析 function call arguments，每完整子节点即 emit；content 兜底；stub 逐个吐出）
-  - [ ] range 时间区间摘要（当前仅 nodeId 子树）
-  - ⏳ **待你实机验证（需真实 AI 网关）**：depth=2/3 多层拆解效果、流式首字延迟（stub 模式下无真实流式）
+  - [x] range 时间区间摘要（`SummarizeDto` scope=range + from/to；从 change_events 聚合区间变更生成阶段进展摘要）
+  - ⏳ **待你实机验证（需真实 AI 网关）**：能力探测准确性、depth=2/3 多层拆解效果、流式首字延迟、range 摘要质量（stub 模式无真实流式/生成）
 
 > **本轮（AI/3D 打磨）代码状态**：全量 typecheck（12 包）+ lint 通过；后端单测 25 个通过（validate 重构无破坏）。
 > 端到端/浏览器/真实网关验证未做（按约定留待你实机运行）。`pnpm test` 因 cli/map-core 暂无测试文件会整体 exit 1（非代码问题）。

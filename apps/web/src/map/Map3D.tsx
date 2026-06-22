@@ -64,6 +64,8 @@ function Scene({
     return g;
   }, [edges, positions]);
 
+  // LOD：节点越多，球体细分越低（减面，单 draw call 下进一步降 GPU 负载）
+  const seg = ordered.length > 1500 ? 8 : ordered.length > 600 ? 10 : 14;
   const hovered = hover != null ? ordered[hover] : undefined;
   const hoveredPos = hovered ? positions.get(hovered.id) : undefined;
 
@@ -90,7 +92,7 @@ function Scene({
             if (n) onPick(n.id);
           }}
         >
-          <sphereGeometry args={[1, 14, 14]} />
+          <sphereGeometry args={[1, seg, seg]} />
           <meshStandardMaterial roughness={0.5} metalness={0.1} />
         </instancedMesh>
       )}
@@ -116,9 +118,15 @@ export default function Map3D({
   onPick: (nodeId: string) => void;
 }) {
   return (
-    <Canvas camera={{ position: [0, 12, 42], fov: 50 }} style={{ background: '#0f172a' }}>
+    // frameloop="demand"：静止时不渲染，仅相机/交互变化时出帧（大图省 GPU/电）。
+    // demand 下不用 damping（惯性需持续帧），OrbitControls 变化会自动 invalidate。
+    <Canvas
+      frameloop="demand"
+      camera={{ position: [0, 12, 42], fov: 50 }}
+      style={{ background: '#0f172a' }}
+    >
       <Scene nodes={nodes} mode={mode} onPick={onPick} />
-      <OrbitControls makeDefault enableDamping />
+      <OrbitControls makeDefault />
     </Canvas>
   );
 }

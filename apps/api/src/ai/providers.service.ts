@@ -4,6 +4,7 @@ import { newId } from '@mindline/shared';
 import { schema, type Database } from '@mindline/db';
 import { DRIZZLE } from '../db/db.module';
 import { decryptSecret, encryptSecret, maskSecret } from '../common/crypto';
+import { probeCapabilities } from './gateway';
 import type { CreateProviderDto, UpdateProviderDto } from './dto/provider.dto';
 
 interface Ctx {
@@ -153,6 +154,27 @@ export class ProvidersService {
   }
 
   /** 供网关使用：取该租户启用的凭证（默认优先），解密 apiKey。无则返回 null（回退 env/stub）。 */
+  /** 探测当前租户活跃配置的模型能力（AI §11）；无配置/无网关 → stub 保守默认。 */
+  async capabilities(ctx: Ctx) {
+    const resolved = await this.getActiveConfig(ctx.tenantId);
+    const creds = resolved
+      ? {
+          url: resolved.endpoint,
+          key: resolved.apiKey,
+          model: resolved.model,
+          provider: resolved.provider,
+        }
+      : undefined;
+    const caps = await probeCapabilities(creds);
+    return {
+      provider: caps.probed ? (resolved?.provider ?? 'openai') : 'stub',
+      model: caps.probed
+        ? (resolved?.model ?? process.env.AI_GATEWAY_MODEL ?? 'gpt-4o-mini')
+        : 'stub',
+      ...caps,
+    };
+  }
+
   async getActiveConfig(tenantId: string): Promise<ResolvedProvider | null> {
     const rows = await this.db
       .select()

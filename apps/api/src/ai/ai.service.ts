@@ -34,6 +34,19 @@ function splitForStream(text: string): string[] {
   return text.match(/[^。！？.!?\n]+[。！？.!?\n]?/g) ?? [text];
 }
 
+/** ChangeOp → 中文标签（range 区间摘要拼可读变更列表用）。 */
+const OP_LABEL: Record<string, string> = {
+  create: '创建',
+  delete: '删除',
+  move: '移动',
+  rename: '重命名',
+  setField: '更新字段',
+  setOwner: '改派负责人',
+  transfer: '转移',
+  aiGenerate: 'AI 生成',
+  comment: '评论',
+};
+
 @Injectable()
 export class AiService {
   constructor(
@@ -254,11 +267,40 @@ export class AiService {
 
   /** 摘要（SSE）：组装子树文本 → 网关纯文本补全 → 分块 delta 推送 → 计量。 */
   async summarize(dto: SummarizeDto, ctx: Ctx, projectId: string, emit: Emit, signal: AbortSignal) {
-    const snap = await this.changes.snapshot(dto.mapId, ctx);
-    const sub = this.collectSubtree(snap.nodes, dto.nodeId);
     const lang = dto.lang || 'zh';
-    const system = `你是摘要助手。请用${lang}为给定的思维导图子树生成简洁、结构化的摘要初稿（3-6 句），提炼要点与关系，供用户编辑，不要逐条复述。`;
-    const user = `# 子树（根：${sub.title}）\n${sub.text}\n\n# 补充要求\n${dto.prompt?.trim() || '（无）'}`;
+    let sumTitle: string;
+    let sumText: string;
+    let sumCount: number;
+    let system: string;
+
+    if (dto.scope === 'range') {
+      // 区间摘要：聚合 [from,to] 的变更事件为可读列表，归纳阶段进展
+      const res = await this.changes.list(dto.mapId, ctx, {
+        from: dto.from,
+        to: dto.to,
+        limit: 200,
+      });
+      const snap = await this.changes.snapshot(dto.mapId, ctx);
+      const titleById = new Map(snap.nodes.map((n) => [n.id, n.title]));
+      const lines = res.items.map((e) => {
+        const t = titleById.get(e.nodeId) ?? e.nodeId;
+        const who = e.actorName ?? e.actorId ?? '某人';
+        const f = e.field ? `（${e.field}）` : '';
+        return `- ${who} ${OP_LABEL[e.op] ?? e.op}「${t}」${f}`;
+      });
+      sumTitle = '时间区间变更';
+      sumText = lines.join('\n') || '（区间内无变更）';
+      sumCount = res.items.length;
+      system = `你是变更摘要助手。请用${lang}把以下时间区间内的思维导图变更，归纳为 3-6 句的「阶段进展摘要」，提炼主要动向与里程碑，供用户编辑，不要逐条复述。`;
+    } else {
+      const snap = await this.changes.snapshot(dto.mapId, ctx);
+      const sub = this.collectSubtree(snap.nodes, dto.nodeId ?? '');
+      sumTitle = sub.title;
+      sumText = sub.text;
+      sumCount = sub.count;
+      system = `你是摘要助手。请用${lang}为给定的思维导图子树生成简洁、结构化的摘要初稿（3-6 句），提炼要点与关系，供用户编辑，不要逐条复述。`;
+    }
+    const user = `# ${dto.scope === 'range' ? '区间变更' : '子树'}（${sumTitle}）\n${sumText}\n\n# 补充要求\n${dto.prompt?.trim() || '（无）'}`;
 
     const resolved = await this.providers.getActiveConfig(ctx.tenantId);
     const creds = resolved
@@ -278,7 +320,10 @@ export class AiService {
       : 'stub';
     emit('meta', { provider, model });
 
-    const stubText = `（示例摘要）「${sub.title}」共包含 ${Math.max(sub.count - 1, 0)} 个子节点，围绕该主题展开。配置真实 AI 网关后此处为模型生成的摘要初稿，可编辑后填入正文。`;
+    const stubText =
+      dto.scope === 'range'
+        ? `（示例摘要）所选时间区间内共 ${sumCount} 条变更。配置真实 AI 网关后此处为阶段进展摘要初稿，可编辑后填入正文。`
+        : `（示例摘要）「${sumTitle}」共包含 ${Math.max(sumCount - 1, 0)} 个子节点，围绕该主题展开。配置真实 AI 网关后此处为模型生成的摘要初稿，可编辑后填入正文。`;
     const result = await callGatewayText({ system, user, signal, stubText, creds });
 
     for (const chunk of splitForStream(result.text)) emit('delta', { text: chunk });

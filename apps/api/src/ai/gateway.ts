@@ -1,4 +1,5 @@
 import type { ProposalModelMeta } from '@mindline/shared';
+import { EMIT_SUBTREE_FUNCTION } from './prompt';
 
 /** 模型返回的原始子节点（未校验）。最小闭环 depth=1，忽略 children。 */
 export interface RawNode {
@@ -313,4 +314,41 @@ export async function callGatewayText(p: TextParams): Promise<TextResult> {
       tokens: { in: usage.prompt_tokens ?? 0, out: usage.completion_tokens ?? 0 },
     },
   };
+}
+
+export interface ModelCapabilities {
+  stream: boolean;
+  functionCall: boolean;
+  jsonMode: boolean;
+  /** 是否真实探测（false=无网关/stub，返回保守默认）。 */
+  probed: boolean;
+}
+
+/**
+ * 探测模型能力（AI §11）。发一次极小 function call 请求判定 functionCall 是否可用；
+ * stream/jsonMode 对 OpenAI 兼容网关乐观置 true（真实 stream 探测代价大，略）。
+ * 无 url → 返回 stub 保守默认（probed:false）。
+ */
+export async function probeCapabilities(creds?: {
+  url?: string;
+  key?: string;
+  model?: string;
+  provider?: string;
+}): Promise<ModelCapabilities> {
+  const url = creds?.url || process.env.AI_GATEWAY_URL;
+  if (!url) return { stream: false, functionCall: false, jsonMode: true, probed: false };
+  let functionCall = false;
+  try {
+    const r = await callGateway({
+      system: '能力探测',
+      user: '请用 emit_subtree 返回一个标题为 ping 的节点',
+      functionDef: EMIT_SUBTREE_FUNCTION as unknown as Record<string, unknown>,
+      stubTitles: [],
+      creds,
+    });
+    functionCall = r.nodes.length > 0;
+  } catch {
+    functionCall = false;
+  }
+  return { stream: true, functionCall, jsonMode: true, probed: true };
 }

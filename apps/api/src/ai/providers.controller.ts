@@ -32,12 +32,13 @@ export class ProvidersController {
     return this.svc.remove(user, id);
   }
 
+  @Get('ai/capabilities')
+  capabilities(@CurrentUser() user: AuthUser) {
+    return this.svc.capabilities(user);
+  }
+
   @Get('ai/usage')
-  usage(
-    @CurrentUser() user: AuthUser,
-    @Query('from') from?: string,
-    @Query('to') to?: string,
-  ) {
+  usage(@CurrentUser() user: AuthUser, @Query('from') from?: string, @Query('to') to?: string) {
     return this.svc.usage(user, {
       from: from ? Number(from) : undefined,
       to: to ? Number(to) : undefined,
